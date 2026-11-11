@@ -1,0 +1,25 @@
+# Entornos virtuales (Python 3.11 del proyecto y del material del curso)
+.venv/
+.venv*/
+
+# Cachés y artefactos generados de Python y pytest
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Audio con derechos de autor: no se versiona
+*.wav
+*.mp3
+*.m4a
+*.ogg
+!songs/.gitkeep
+
+# Registro interno de trabajo (no forma parte del proyecto)
+odd/
+
+# Sistema operativo y editores
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
