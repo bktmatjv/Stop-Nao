@@ -23,3 +23,6 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# Estado local de herramientas de agentes (no forma parte del proyecto)
+.atl/
