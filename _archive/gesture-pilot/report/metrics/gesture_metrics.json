@@ -1,0 +1,236 @@
+{
+  "model_name": "Random Forest",
+  "accuracy": 1.0,
+  "f1_macro": 1.0,
+  "per_class_report": {
+    "NONE": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 1.0
+    },
+    "STOP": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 1.0
+    },
+    "TURN_RIGHT": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 39.0
+    },
+    "accuracy": 1.0,
+    "macro avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 41.0
+    },
+    "weighted avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 41.0
+    }
+  },
+  "best_params": {
+    "max_depth": null,
+    "min_samples_leaf": 1,
+    "n_estimators": 50
+  },
+  "cv_scores": [
+    1.0,
+    1.0
+  ],
+  "cv_f1_macro_mean": 1.0,
+  "train_size": 162,
+  "test_size": 41,
+  "inference_ms_per_sample": 2.427248781115362,
+  "labels": [
+    "NONE",
+    "STOP",
+    "TURN_RIGHT"
+  ],
+  "split": {
+    "strategy": "StratifiedKFold + stratified 20% hold-out (fallback, <3 persons)",
+    "persons": [
+      "matias"
+    ],
+    "test_person": null,
+    "cv_splits": 2,
+    "refit_all": false
+  },
+  "preprocessing": {
+    "rows_total": 2857,
+    "rows_dropped_missing": 2654,
+    "rows_used": 203,
+    "rows_per_label": {
+      "NONE": 7,
+      "STOP": 3,
+      "TURN_RIGHT": 193
+    },
+    "rows_per_person": {
+      "matias": 203
+    }
+  },
+  "models": {
+    "random_forest": {
+      "model": "Random Forest",
+      "best_params": {
+        "max_depth": null,
+        "min_samples_leaf": 1,
+        "n_estimators": 50
+      },
+      "cv_f1_macro_mean": 1.0,
+      "cv_f1_macro_std": 0.0,
+      "cv_scores": [
+        1.0,
+        1.0
+      ],
+      "test_accuracy": 1.0,
+      "test_f1_macro": 1.0,
+      "per_class_report": {
+        "NONE": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 1.0
+        },
+        "STOP": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 1.0
+        },
+        "TURN_RIGHT": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 39.0
+        },
+        "accuracy": 1.0,
+        "macro avg": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 41.0
+        },
+        "weighted avg": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 41.0
+        }
+      },
+      "confusion_matrix": [
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          39
+        ]
+      ],
+      "inference_ms_per_sample": 2.427248781115362
+    },
+    "svm": {
+      "model": "SVM (kernel RBF)",
+      "best_params": {
+        "C": 1,
+        "gamma": "scale"
+      },
+      "cv_f1_macro_mean": 1.0,
+      "cv_f1_macro_std": 0.0,
+      "cv_scores": [
+        1.0,
+        1.0
+      ],
+      "test_accuracy": 1.0,
+      "test_f1_macro": 1.0,
+      "per_class_report": {
+        "NONE": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 1.0
+        },
+        "STOP": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 1.0
+        },
+        "TURN_RIGHT": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 39.0
+        },
+        "accuracy": 1.0,
+        "macro avg": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 41.0
+        },
+        "weighted avg": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 41.0
+        }
+      },
+      "confusion_matrix": [
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          39
+        ]
+      ],
+      "inference_ms_per_sample": 0.4256731701344706
+    }
+  },
+  "learning_curve": {
+    "train_sizes": [
+      16,
+      32,
+      48,
+      64,
+      81
+    ],
+    "train_f1_macro_mean": [
+      1.0,
+      0.746031746031746,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "val_f1_macro_mean": [
+      0.6645161290322581,
+      0.6624472573839663,
+      1.0,
+      1.0,
+      0.832258064516129
+    ]
+  }
+}

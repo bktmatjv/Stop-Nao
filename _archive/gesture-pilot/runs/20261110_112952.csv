@@ -1,0 +1,4 @@
+timestamp,gesture,confidence,sonar_left,sonar_right,person_distance,moving,action,reason,latency_ms
+2026-11-10T11:30:48.046,TURN_RIGHT,0.740,1.500,1.500,0.300,0,TURN_RIGHT,rule-based fallback: gesture TURN_RIGHT,0.3
+2026-11-10T11:31:12.835,TURN_RIGHT,0.614,0.200,0.200,0.232,0,TURN_RIGHT,rule-based fallback: gesture TURN_RIGHT,0.5
+2026-11-10T11:31:30.927,STOP,0.603,0.200,0.200,0.239,0,STOP,rule-based fallback: gesture STOP,0.8

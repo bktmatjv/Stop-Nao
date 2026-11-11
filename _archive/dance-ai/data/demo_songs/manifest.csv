@@ -1,0 +1,5 @@
+song_id,file,title,artist,source,license,notes
+d01,d01_yo_quisiera.wav,Yo Quisiera,Reik,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=balada; original_file=Reik_-_Yo_Quisiera_(Audio).wav
+d02,d02_motor_y_motivo.wav,Motor Y Motivo,,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=cumbia; original_file=Motor_Y_Motivo.wav
+d03,d03_time_of_our_lives.wav,Time of Our Lives,,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=pop; original_file=Time_of_Our_Lives.wav
+d04,d04_la_player.wav,La player,Zion & Lennox,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=regueton; original_file=Zion_&_Lennox_-_La_player_(Bandolera).wav

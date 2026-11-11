@@ -1,0 +1,17 @@
+song_id,file,title,artist,source,license,notes
+s01,s01_thinking_out_loud.wav,Thinking Out Loud,Ed Sheeran,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=balada; original_file=Ed_Sheeran_-_Thinking_Out_Loud_[Official_Audio].wav
+s02,s02_all_of_me.wav,All of Me,John Legend,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=balada; original_file=John_Legend_-_All_of_Me_(Audio).wav
+s03,s03_she_will_be_loved.wav,She Will Be Loved,Maroon 5,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=balada; original_file=Maroon_5_-_She_Will_Be_Loved_(Official_Audio).wav
+s04,s04_ya_me_entere.wav,Ya Me Enteré,Reik,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=balada; original_file=Reik_-_Ya_Me_Enteré_(Letra_Oficial).wav
+s05,s05_bronceado.wav,Bronceado,,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=cumbia; original_file=Bronceado.wav
+s06,s06_el_ritmo_de_mi_corazon.wav,El Ritmo de Mi Corazón,,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=cumbia; original_file=El_Ritmo_de_Mi_Corazón.wav
+s07,s07_esta_noche.wav,Esta Noche,,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=cumbia; original_file=Esta_Noche.wav
+s08,s08_que_ironia.wav,Qué ironía,"La T y La M, J Balvin",YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,"genre=cumbia; original_file=La_T_y_La_M,_J_Balvin_-_Qué_ironía.wav"
+s09,s09_beauty_and_a_beat.wav,Beauty And A Beat,,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=pop; original_file=Beauty_And_A_Beat.wav
+s10,s10_eenie_meenie.wav,Eenie Meenie,,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=pop; original_file=Eenie_Meenie.wav
+s11,s11_baby_ft_ludacris.wav,Baby ft. Ludacris,Justin Bieber,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=pop; original_file=Justin_Bieber_-_Baby_ft._Ludacris.wav
+s12,s12_firework.wav,Firework,Katy Perry,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=pop; original_file=Katy_Perry_-_Firework_(Audio).wav
+s13,s13_amanece.wav,Amanece,"Anuel AA, Haze",YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,"genre=regueton; original_file=Anuel_AA,_Haze_-_Amanece_(Audio).wav"
+s14,s14_velda.wav,VeLDÁ,"Bad Bunny, Omar Courtz, Dei V",YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,"genre=regueton; original_file=Bad_Bunny,_Omar_Courtz,_Dei_V_-_VeLDÁ_(Video_Lyrics).wav"
+s15,s15_criminal.wav,Criminal,Natti Natasha Ft. Ozuna,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,genre=regueton; original_file=Natti_Natasha_Ft._Ozuna_-_Criminal.wav
+s16,s16_otro_trago_ft_darell_nicky_jam_ozuna_anu.wav,"Otro Trago ft. Darell, Nicky Jam, Ozuna, Anuel AA",Sech,YouTube (inferred from file names; team must confirm),Academic use only; not redistributed,"genre=regueton; original_file=Sech_-_Otro_Trago_(Remix)_ft._Darell,_Nicky_Jam,_Ozuna,_Anuel_AA_(Audio_Oficial).wav"

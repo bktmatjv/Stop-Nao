@@ -1,0 +1,7 @@
+"""Shared configuration constants."""
+
+SAMPLE_RATE = 22050
+SEGMENT_SECONDS = 8.0
+MIN_SEGMENT_FRACTION = 0.5
+BPM_MIN = 60.0
+BPM_MAX = 180.0
