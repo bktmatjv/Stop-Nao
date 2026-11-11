@@ -1,0 +1,8 @@
+timestamp,gesture,confidence,sonar_left,sonar_right,hand_size,moving,standing,requested_intent,action,params,reason,eye_color,overridden,bridge_ok,simulated,latency_ms
+2026-11-10T18:45:23.381,POINT_LEFT,0.700,5.000,5.000,0.090,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,cyan,0,1,0,521.8
+2026-11-10T18:46:49.837,THUMBS_UP,0.964,2.430,5.000,0.084,0,1,ADVANCE,ADVANCE,"{""x"": 0.35}","Avanzo, el camino está libre.",green,0,1,0,354.5
+2026-11-10T18:46:59.450,VICTORY,0.912,2.760,5.000,0.101,0,1,WAVE,WAVE,{},¡Hola! ¡Modo fiesta y victoria activado! ¡A bailar!,magenta,0,0,0,776.8
+2026-11-10T18:47:05.038,POINT_LEFT,0.904,3.150,3.300,0.091,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,cyan,0,1,0,397.9
+2026-11-10T18:47:10.997,VICTORY,0.854,3.300,3.880,0.105,0,1,WAVE,WAVE,{},¡Hola! ¡Modo fiesta y victoria activado! ¡A bailar!,magenta,0,0,0,801.6
+2026-11-10T18:47:19.805,POINT_LEFT,0.906,5.000,3.870,0.116,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,cyan,0,1,0,563.8
+2026-11-10T18:47:28.306,OPEN_PALM,0.937,3.870,5.000,0.264,0,1,STOP,STOP,{},Me detengo.,green,0,1,0,1467.3

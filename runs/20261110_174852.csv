@@ -1,0 +1,28 @@
+timestamp,gesture,confidence,sonar_left,sonar_right,hand_size,moving,standing,requested_intent,action,params,reason,eye_color,overridden,bridge_ok,simulated,latency_ms
+2026-11-10T17:49:13.804,THUMBS_UP,0.963,0.750,0.900,0.096,0,1,ADVANCE,ADVANCE,"{""x"": 0.2}","Avanzo, el camino está libre.",green,0,1,0,462.6
+2026-11-10T17:49:18.579,THUMBS_UP,0.981,0.470,0.600,0.218,0,1,ADVANCE,ADVANCE_SHORT,"{""x"": 0.17}",Solo puedo avanzar 17 centímetros.,yellow,1,1,0,362.3
+2026-11-10T17:49:21.695,POINT_LEFT,0.897,0.440,0.530,0.098,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,green,0,1,0,432.7
+2026-11-10T17:49:26.773,POINT_RIGHT,0.942,0.610,0.490,0.105,0,1,TURN_LEFT,TURN_LEFT,"{""theta"": 0.785}",Giro a la izquierda.,green,0,1,0,331.1
+2026-11-10T17:49:30.741,OPEN_PALM,0.935,0.430,0.740,0.145,0,1,STOP,STOP,{},Me detengo.,green,0,1,0,415.9
+2026-11-10T17:49:50.423,FIST,0.986,0.450,1.100,0.130,0,1,SIT,SIT,{},Me siento.,green,0,1,0,16620.7
+2026-11-10T17:49:53.853,THUMBS_UP,0.957,0.510,0.980,0.083,0,0,ADVANCE,WARN_MUST_STAND,{},Primero debo ponerme de pie.,yellow,1,1,0,436.4
+2026-11-10T17:50:09.298,FIST,0.985,0.780,1.010,0.084,0,0,STAND,STAND,{},Me pongo de pie.,green,0,1,0,13041.9
+2026-11-10T17:50:13.349,POINT_RIGHT,0.983,0.480,1.000,0.079,0,1,TURN_LEFT,TURN_LEFT,"{""theta"": 0.785}",Giro a la izquierda.,green,0,1,0,436.6
+2026-11-10T17:50:38.715,POINT_LEFT,0.900,0.530,0.500,0.082,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,green,0,1,0,523.7
+2026-11-10T17:50:45.764,THUMBS_UP,0.971,0.670,0.490,0.062,0,1,ADVANCE,ADVANCE_SHORT,"{""x"": 0.19}",Solo puedo avanzar 19 centímetros.,yellow,1,1,0,785.9
+2026-11-10T17:50:51.468,THUMBS_UP,0.989,0.560,0.520,0.098,0,1,ADVANCE,ADVANCE,"{""x"": 0.2}","Avanzo, el camino está libre.",green,0,1,0,305.7
+2026-11-10T17:50:55.709,POINT_RIGHT,0.941,0.860,0.830,0.088,0,1,TURN_LEFT,TURN_LEFT,"{""theta"": 0.785}",Giro a la izquierda.,green,0,1,0,333.0
+2026-11-10T17:51:00.127,POINT_RIGHT,0.943,0.490,0.530,0.089,0,1,TURN_LEFT,TURN_LEFT,"{""theta"": 0.785}",Giro a la izquierda.,green,0,1,0,411.4
+2026-11-10T17:51:04.661,POINT_RIGHT,0.913,0.510,0.470,0.109,0,1,TURN_LEFT,TURN_LEFT,"{""theta"": 0.785}",Giro a la izquierda.,green,0,1,0,299.3
+2026-11-10T17:51:09.967,THUMBS_UP,0.972,0.550,0.810,0.072,0,1,ADVANCE,ADVANCE,"{""x"": 0.2}","Avanzo, el camino está libre.",green,0,1,0,407.8
+2026-11-10T17:51:14.539,THUMBS_UP,0.975,0.660,0.770,0.091,0,1,ADVANCE,ADVANCE,"{""x"": 0.2}","Avanzo, el camino está libre.",green,0,1,0,330.7
+2026-11-10T17:51:20.021,VICTORY,0.975,0.620,0.810,0.065,0,1,WAVE,WAVE,{},Te saludo.,green,0,0,0,304.4
+2026-11-10T17:51:23.563,VICTORY,0.958,0.570,1.040,0.077,0,1,WAVE,WAVE,{},Te saludo.,green,0,0,0,671.6
+2026-11-10T17:51:28.905,POINT_LEFT,0.932,0.500,0.700,0.081,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,green,0,1,0,338.9
+2026-11-10T17:51:33.105,POINT_LEFT,0.901,0.600,0.850,0.072,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,green,0,1,0,280.1
+2026-11-10T17:51:53.932,FIST,0.986,0.530,0.670,0.084,0,1,SIT,SIT,{},Me siento.,green,0,1,0,16584.5
+2026-11-10T17:52:09.825,FIST,0.983,1.040,0.800,0.086,0,0,STAND,STAND,{},Me pongo de pie.,green,0,1,0,13273.4
+2026-11-10T17:52:13.753,VICTORY,0.981,0.510,0.790,0.102,0,1,WAVE,WAVE,{},Te saludo.,green,0,0,0,332.3
+2026-11-10T17:52:17.195,POINT_LEFT,0.953,0.650,0.720,0.105,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,green,0,1,0,410.2
+2026-11-10T17:52:24.289,THUMBS_UP,0.960,0.490,0.750,0.197,0,1,ADVANCE,ADVANCE_SHORT,"{""x"": 0.19}",Solo puedo avanzar 19 centímetros.,yellow,1,1,0,630.3
+2026-11-10T17:52:36.924,POINT_LEFT,0.901,0.620,1.080,0.187,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,green,0,1,0,356.8

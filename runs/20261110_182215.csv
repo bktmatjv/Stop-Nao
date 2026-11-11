@@ -1,0 +1,16 @@
+timestamp,gesture,confidence,sonar_left,sonar_right,hand_size,moving,standing,requested_intent,action,params,reason,eye_color,overridden,bridge_ok,simulated,latency_ms
+2026-11-10T18:22:52.946,POINT_RIGHT,0.950,1.500,1.500,0.126,0,1,TURN_LEFT,TURN_LEFT,"{""theta"": 0.785}",Giro a la izquierda.,cyan,0,1,1,217.8
+2026-11-10T18:23:03.427,VICTORY,0.980,1.500,1.500,0.140,0,1,WAVE,WAVE,{},¡Hola! ¡Modo fiesta y victoria activado! ¡A bailar!,magenta,0,0,1,237.9
+2026-11-10T18:23:14.524,POINT_RIGHT,0.952,1.500,1.500,0.111,0,1,TURN_LEFT,TURN_LEFT,"{""theta"": 0.785}",Giro a la izquierda.,cyan,0,1,1,215.9
+2026-11-10T18:23:19.932,VICTORY,1.000,1.500,1.500,0.226,1,1,WAVE,WARN_MUST_STOP,{},Me estoy moviendo. Primero debo detenerme para saludar.,red,1,1,1,492.8
+2026-11-10T18:23:25.712,VICTORY,0.983,1.500,1.500,0.221,0,1,WAVE,WAVE,{},¡Hola! ¡Modo fiesta y victoria activado! ¡A bailar!,magenta,0,0,1,230.0
+2026-11-10T18:23:35.505,THUMBS_UP,0.958,1.500,1.500,0.197,0,1,ADVANCE,ADVANCE,"{""x"": 0.35}","Avanzo, el camino está libre.",green,0,1,1,215.0
+2026-11-10T18:23:47.330,OPEN_PALM,0.938,1.500,1.500,0.272,0,1,STOP,STOP,{},Me detengo.,green,0,1,1,401.3
+2026-11-10T18:23:52.939,VICTORY,0.983,1.500,1.500,0.188,0,1,WAVE,WAVE,{},¡Hola! ¡Modo fiesta y victoria activado! ¡A bailar!,magenta,0,0,1,224.6
+2026-11-10T18:24:00.389,POINT_RIGHT,0.941,1.500,1.500,0.177,0,1,TURN_LEFT,TURN_LEFT,"{""theta"": 0.785}",Giro a la izquierda.,cyan,0,1,1,214.7
+2026-11-10T18:24:06.796,THUMBS_UP,0.965,1.500,1.500,0.186,1,1,ADVANCE,ADVANCE,"{""x"": 0.35}","Avanzo, el camino está libre.",green,0,1,1,219.4
+2026-11-10T18:24:23.127,VICTORY,0.973,1.500,1.500,0.163,0,1,WAVE,WAVE,{},¡Hola! ¡Modo fiesta y victoria activado! ¡A bailar!,magenta,0,0,1,473.3
+2026-11-10T18:24:29.338,VICTORY,0.983,1.500,1.500,0.172,0,1,WAVE,WAVE,{},¡Hola! ¡Modo fiesta y victoria activado! ¡A bailar!,magenta,0,0,1,431.4
+2026-11-10T18:24:32.322,THUMBS_UP,0.968,1.500,1.500,0.219,0,1,ADVANCE,ADVANCE,"{""x"": 0.35}","Avanzo, el camino está libre.",green,0,1,1,214.1
+2026-11-10T18:24:37.523,THUMBS_UP,0.971,1.500,1.500,0.168,1,1,ADVANCE,ADVANCE,"{""x"": 0.35}","Avanzo, el camino está libre.",green,0,1,1,213.4
+2026-11-10T18:24:41.889,THUMBS_UP,0.967,1.500,1.500,0.109,1,1,ADVANCE,ADVANCE,"{""x"": 0.35}","Avanzo, el camino está libre.",green,0,1,1,215.3

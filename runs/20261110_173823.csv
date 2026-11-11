@@ -1,0 +1,28 @@
+timestamp,gesture,confidence,sonar_left,sonar_right,hand_size,moving,standing,requested_intent,action,params,reason,eye_color,overridden,bridge_ok,simulated,latency_ms
+2026-11-10T17:39:22.706,FIST,0.974,1.500,1.500,0.124,0,1,SIT,SIT,{},Me siento.,green,0,1,1,21275.5
+2026-11-10T17:39:27.460,VICTORY,0.978,1.500,1.500,0.120,0,0,WAVE,WARN_MUST_STAND,{},Estoy sentado. Primero debo ponerme de pie para saludar.,yellow,1,1,1,212.7
+2026-11-10T17:39:47.031,FIST,0.953,1.500,1.500,0.224,0,0,STAND,STAND,{},Me pongo de pie.,green,0,1,1,16828.2
+2026-11-10T17:39:50.276,THUMBS_UP,0.877,1.500,1.500,0.095,0,1,ADVANCE,ADVANCE,"{""x"": 0.2}","Avanzo, el camino está libre.",green,0,1,1,218.7
+2026-11-10T17:39:57.536,THUMBS_UP,0.966,1.500,1.500,0.084,0,1,ADVANCE,ADVANCE,"{""x"": 0.2}","Avanzo, el camino está libre.",green,0,1,1,218.2
+2026-11-10T17:40:03.555,THUMBS_UP,0.958,1.500,1.500,0.115,0,1,ADVANCE,ADVANCE,"{""x"": 0.2}","Avanzo, el camino está libre.",green,0,1,1,219.1
+2026-11-10T17:40:08.004,POINT_LEFT,0.902,1.500,1.500,0.123,1,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,green,0,1,1,229.0
+2026-11-10T17:40:13.279,OPEN_PALM,0.933,1.500,1.500,0.067,0,1,STOP,STOP,{},Me detengo.,green,0,1,1,217.2
+2026-11-10T17:40:16.452,POINT_LEFT,0.905,1.500,1.500,0.144,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,green,0,1,1,216.7
+2026-11-10T17:40:24.739,VICTORY,0.978,1.500,1.500,0.126,0,1,WAVE,WAVE,{},Te saludo.,green,0,0,1,211.5
+2026-11-10T17:40:26.291,VICTORY,0.977,1.500,1.500,0.147,0,1,WAVE,WAVE,{},Te saludo.,green,0,0,1,217.5
+2026-11-10T17:40:32.853,OPEN_PALM,0.937,1.500,1.500,0.285,0,1,STOP,STOP,{},Me detengo.,green,0,1,1,214.8
+2026-11-10T17:40:36.799,OPEN_PALM,0.938,1.500,1.500,0.237,0,1,STOP,STOP,{},Me detengo.,green,0,1,1,215.3
+2026-11-10T17:40:41.080,THUMBS_UP,0.978,1.500,1.500,0.176,0,1,ADVANCE,ADVANCE,"{""x"": 0.2}","Avanzo, el camino está libre.",green,0,1,1,216.2
+2026-11-10T17:40:47.827,FIST,0.908,1.500,1.500,0.134,1,1,SIT,WARN_MUST_STOP,{},Me estoy moviendo. Primero debo detenerme para sentarme.,red,1,1,1,646.2
+2026-11-10T17:40:50.195,THUMBS_UP,0.991,1.500,1.500,0.124,0,0,ADVANCE,WARN_MUST_STAND,{},Primero debo ponerme de pie.,yellow,1,1,1,219.0
+2026-11-10T17:40:51.675,THUMBS_UP,0.994,1.500,1.500,0.107,0,0,ADVANCE,WARN_MUST_STAND,{},Primero debo ponerme de pie.,yellow,1,1,1,207.7
+2026-11-10T17:41:01.831,THUMBS_UP,0.963,1.500,1.500,0.146,0,0,ADVANCE,WARN_MUST_STAND,{},Primero debo ponerme de pie.,yellow,1,1,1,217.2
+2026-11-10T17:41:06.788,FIST,0.932,1.500,1.500,0.218,0,0,STAND,STAND,{},Me pongo de pie.,green,0,1,1,2510.3
+2026-11-10T17:41:11.742,THUMBS_UP,0.975,1.500,1.500,0.123,0,1,ADVANCE,ADVANCE,"{""x"": 0.2}","Avanzo, el camino está libre.",green,0,1,1,216.6
+2026-11-10T17:41:16.408,THUMBS_UP,0.967,1.500,1.500,0.048,1,1,ADVANCE,ADVANCE,"{""x"": 0.2}","Avanzo, el camino está libre.",green,0,1,1,217.2
+2026-11-10T17:41:48.120,POINT_LEFT,0.894,1.500,1.500,0.051,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,green,0,1,1,214.7
+2026-11-10T17:41:54.924,POINT_LEFT,0.894,1.500,1.500,0.094,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,green,0,1,1,213.4
+2026-11-10T17:42:00.624,THUMBS_UP,0.961,1.500,1.500,0.076,0,1,ADVANCE,ADVANCE,"{""x"": 0.2}","Avanzo, el camino está libre.",green,0,1,1,214.8
+2026-11-10T17:42:09.873,POINT_RIGHT,0.939,1.500,1.500,0.096,0,1,TURN_LEFT,TURN_LEFT,"{""theta"": 0.785}",Giro a la izquierda.,green,0,1,1,214.4
+2026-11-10T17:42:23.301,OPEN_PALM,0.935,1.500,1.500,0.222,0,1,STOP,STOP,{},Me detengo.,green,0,1,1,216.0
+2026-11-10T17:42:50.256,FIST,0.687,1.500,1.500,0.055,0,1,SIT,SIT,{},Me siento.,green,0,1,1,21243.3

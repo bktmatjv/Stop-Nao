@@ -1,0 +1,36 @@
+timestamp,gesture,confidence,sonar_left,sonar_right,hand_size,moving,standing,requested_intent,action,params,reason,eye_color,overridden,bridge_ok,simulated,latency_ms
+2026-11-10T17:30:43.692,OPEN_PALM,0.938,0.000,0.000,0.200,0,1,STOP,STOP,{},Me detengo.,green,0,1,0,228.7
+2026-11-10T17:30:49.127,THUMBS_UP,0.965,0.000,0.000,0.066,0,1,ADVANCE,WARN_OBSTACLE,{},No puedo medir la distancia al frente. No avanzo por seguridad.,red,1,1,0,212.5
+2026-11-10T17:30:54.577,THUMBS_UP,0.959,0.000,0.000,0.113,0,1,ADVANCE,WARN_OBSTACLE,{},No puedo medir la distancia al frente. No avanzo por seguridad.,red,1,1,0,213.4
+2026-11-10T17:30:59.561,THUMBS_UP,0.958,0.000,0.000,0.102,0,1,ADVANCE,WARN_OBSTACLE,{},No puedo medir la distancia al frente. No avanzo por seguridad.,red,1,1,0,210.3
+2026-11-10T17:31:04.162,POINT_LEFT,0.936,0.000,0.000,0.103,0,1,TURN_RIGHT,WARN_OBSTACLE,{},No puedo medir la distancia a mi derecha. No giro por seguridad.,red,1,1,0,215.3
+2026-11-10T17:31:07.628,THUMBS_UP,0.959,0.000,0.000,0.109,0,1,ADVANCE,WARN_OBSTACLE,{},No puedo medir la distancia al frente. No avanzo por seguridad.,red,1,1,0,207.7
+2026-11-10T17:31:10.959,POINT_LEFT,0.895,0.000,0.000,0.113,0,1,TURN_RIGHT,WARN_OBSTACLE,{},No puedo medir la distancia a mi derecha. No giro por seguridad.,red,1,1,0,208.8
+2026-11-10T17:31:11.751,OPEN_PALM,0.941,0.000,0.000,0.220,0,1,STOP,STOP,{},Me detengo.,green,0,1,0,212.8
+2026-11-10T17:31:13.854,OPEN_PALM,0.939,0.000,0.000,0.255,0,1,STOP,STOP,{},Me detengo.,green,0,1,0,211.2
+2026-11-10T17:31:16.789,OPEN_PALM,0.937,0.000,0.000,0.150,0,1,STOP,STOP,{},Me detengo.,green,0,1,0,210.4
+2026-11-10T17:31:18.893,OPEN_PALM,0.939,0.000,0.000,0.153,0,1,STOP,STOP,{},Me detengo.,green,0,1,0,214.3
+2026-11-10T17:31:21.827,OPEN_PALM,0.934,0.000,0.000,0.276,0,1,STOP,STOP,{},Me detengo.,green,0,1,0,212.1
+2026-11-10T17:31:29.761,THUMBS_UP,0.898,0.000,0.000,0.050,0,1,ADVANCE,WARN_OBSTACLE,{},No puedo medir la distancia al frente. No avanzo por seguridad.,red,1,1,0,214.3
+2026-11-10T17:31:34.691,VICTORY,0.973,0.000,0.000,0.183,0,1,WAVE,WAVE,{},Te saludo.,green,0,0,0,227.5
+2026-11-10T17:31:42.815,VICTORY,0.955,0.000,0.000,0.222,0,1,WAVE,WAVE,{},Te saludo.,green,0,0,0,215.0
+2026-11-10T17:31:44.374,VICTORY,0.955,0.000,0.000,0.244,0,1,WAVE,WAVE,{},Te saludo.,green,0,0,0,212.9
+2026-11-10T17:31:48.474,VICTORY,0.962,0.000,0.000,0.193,0,1,WAVE,WAVE,{},Te saludo.,green,0,0,0,215.4
+2026-11-10T17:32:14.164,FIST,0.890,0.000,0.000,0.147,0,1,SIT,SIT,{},Me siento.,green,0,1,0,21329.9
+2026-11-10T17:32:33.602,FIST,0.978,0.000,0.000,0.098,0,0,STAND,STAND,{},Me pongo de pie.,green,0,1,0,16824.7
+2026-11-10T17:32:55.348,FIST,0.978,0.000,0.000,0.063,0,1,SIT,SIT,{},Me siento.,green,0,1,0,21246.5
+2026-11-10T17:32:57.585,OPEN_PALM,0.937,0.000,0.000,0.226,0,0,STOP,STOP,{},Me detengo.,green,0,1,0,216.5
+2026-11-10T17:32:59.687,OPEN_PALM,0.937,0.000,0.000,0.207,0,0,STOP,STOP,{},Me detengo.,green,0,1,0,213.4
+2026-11-10T17:33:04.645,POINT_LEFT,0.899,0.000,0.000,0.093,0,0,TURN_RIGHT,WARN_OBSTACLE,{},No puedo medir la distancia a mi derecha. No giro por seguridad.,red,1,1,0,214.9
+2026-11-10T17:33:10.333,POINT_LEFT,0.903,0.000,0.000,0.097,0,0,TURN_RIGHT,WARN_OBSTACLE,{},No puedo medir la distancia a mi derecha. No giro por seguridad.,red,1,1,0,217.3
+2026-11-10T17:33:13.905,POINT_LEFT,0.895,0.000,0.000,0.098,0,0,TURN_RIGHT,WARN_OBSTACLE,{},No puedo medir la distancia a mi derecha. No giro por seguridad.,red,1,1,0,214.8
+2026-11-10T17:33:43.251,POINT_LEFT,0.899,0.000,0.000,0.156,0,0,TURN_RIGHT,WARN_OBSTACLE,{},No puedo medir la distancia a mi derecha. No giro por seguridad.,red,1,1,0,215.5
+2026-11-10T17:33:45.776,VICTORY,0.980,0.000,0.000,0.084,0,0,WAVE,WARN_MUST_STAND,{},Estoy sentado. Primero debo ponerme de pie para saludar.,yellow,1,1,0,219.1
+2026-11-10T17:33:50.583,OPEN_PALM,0.938,0.000,0.000,0.242,0,0,STOP,STOP,{},Me detengo.,green,0,1,0,214.0
+2026-11-10T17:34:10.248,FIST,0.984,0.000,0.000,0.177,0,0,STAND,STAND,{},Me pongo de pie.,green,0,1,0,16977.0
+2026-11-10T17:34:14.478,POINT_LEFT,0.895,0.000,0.000,0.105,0,1,TURN_RIGHT,WARN_OBSTACLE,{},No puedo medir la distancia a mi derecha. No giro por seguridad.,red,1,1,0,216.3
+2026-11-10T17:34:18.558,POINT_RIGHT,0.926,0.000,0.000,0.115,0,1,TURN_LEFT,WARN_OBSTACLE,{},No puedo medir la distancia a mi izquierda. No giro por seguridad.,red,1,1,0,215.0
+2026-11-10T17:34:22.233,VICTORY,0.979,0.000,0.000,0.173,0,1,WAVE,WAVE,{},Te saludo.,green,0,0,0,218.1
+2026-11-10T17:34:26.851,VICTORY,0.977,0.000,0.000,0.159,0,1,WAVE,WAVE,{},Te saludo.,green,0,0,0,213.9
+2026-11-10T17:34:33.780,VICTORY,0.943,0.000,0.000,0.120,0,1,WAVE,WAVE,{},Te saludo.,green,0,0,0,227.0
+2026-11-10T17:34:55.481,FIST,0.917,0.000,0.000,0.135,0,1,SIT,SIT,{},Me siento.,green,0,1,0,20158.0

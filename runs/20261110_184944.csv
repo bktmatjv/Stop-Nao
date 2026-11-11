@@ -1,0 +1,11 @@
+timestamp,gesture,confidence,sonar_left,sonar_right,hand_size,moving,standing,requested_intent,action,params,reason,eye_color,overridden,bridge_ok,simulated,latency_ms
+2026-11-10T18:50:03.664,POINT_LEFT,0.902,2.120,5.000,0.086,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,cyan,0,1,0,368.4
+2026-11-10T18:50:08.643,POINT_LEFT,0.906,5.000,5.000,0.093,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,cyan,0,1,0,643.4
+2026-11-10T18:50:15.035,VICTORY,0.960,5.000,5.000,0.082,1,1,WAVE,WARN_MUST_STOP,{},Me estoy moviendo. Primero debo detenerme para saludar.,red,1,1,0,423.2
+2026-11-10T18:50:19.824,VICTORY,0.960,5.000,5.000,0.054,0,1,WAVE,WAVE,{},¡Hola! ¡Modo fiesta y victoria activado! ¡A bailar!,magenta,0,0,0,1288.0
+2026-11-10T18:50:26.762,OPEN_PALM,0.937,5.000,5.000,0.231,0,1,STOP,STOP,{},Me detengo.,green,0,1,0,511.3
+2026-11-10T18:50:31.903,VICTORY,0.986,5.000,5.000,0.069,0,1,WAVE,WAVE,{},¡Hola! ¡Modo fiesta y victoria activado! ¡A bailar!,magenta,0,0,0,432.3
+2026-11-10T18:50:35.364,VICTORY,0.986,5.000,5.000,0.071,0,1,WAVE,WAVE,{},¡Hola! ¡Modo fiesta y victoria activado! ¡A bailar!,magenta,0,0,0,850.5
+2026-11-10T18:50:40.128,THUMBS_UP,0.976,5.000,5.000,0.099,0,1,ADVANCE,ADVANCE,"{""x"": 0.35}","Avanzo, el camino está libre.",green,0,1,0,595.0
+2026-11-10T18:50:47.539,VICTORY,0.962,5.000,5.000,0.137,0,1,WAVE,WAVE,{},¡Hola! ¡Modo fiesta y victoria activado! ¡A bailar!,magenta,0,0,0,1097.5
+2026-11-10T18:50:51.360,VICTORY,0.962,5.000,5.000,0.244,0,1,WAVE,WAVE,{},¡Hola! ¡Modo fiesta y victoria activado! ¡A bailar!,magenta,0,0,0,773.9
