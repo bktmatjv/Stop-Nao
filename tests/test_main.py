@@ -283,17 +283,27 @@ def test_fist_toggles_sit_and_stand(mock_client):
 
 
 @needs_py27
-def test_victory_waves_when_standing_and_still(mock_client):
+def test_voice_wave_waves_when_standing_and_still(mock_client):
+    # VICTORY no longer waves (it toggles the input); WAVE stays reachable by voice.
     rec = Recorder(mock_client)
-    record = make_pilot(rec, [("VICTORY", 0.9)]).step(HAND, "Right", now=0.0)
+    class SilentMusic:  # never start real audio from a test
+        def play_random(self):
+            return None
+
+        def stop(self):
+            pass
+
+    pilot = Pilot(rec, ScriptedPredictor([("NONE", 0.0)]), ContextDecider(None),
+                  sense_interval=None, music=SilentMusic())
+    record = pilot.handle_intent("WAVE", now=0.0)
     assert record.decision.action == "WAVE"
     assert ("dance" in rec.names() or "wave" in rec.names())
     assert record.bridge_ok is True
 
 
-def test_victory_with_person_too_close_warns_and_does_not_wave():
+def test_voice_wave_with_person_too_close_warns_and_does_not_wave():
     client = FakeClient()
-    record = make_pilot(client, [("VICTORY", 0.9)]).step(CLOSE_HAND, "Right", now=0.0)
+    record = make_pilot(client, [("NONE", 0.0)]).handle_intent("WAVE", now=0.0, size=0.4)
     assert record.decision.action == "WARN_TOO_CLOSE"
     assert "wave" not in client.names() and "dance" not in client.names()
     assert ("eyes", "red") in client.calls
@@ -339,12 +349,13 @@ def test_confirmation_expires_after_window_and_does_not_execute():
 
 def test_wrong_gesture_does_not_confirm():
     client = FakeClient()
-    pilot = make_pilot(client, [("THUMBS_UP", 0.45), ("NONE", 0.0), ("OPEN_PALM", 0.9)],
+    # (OPEN_PALM is the e-stop and bypasses the cooldown, so another gesture is used here)
+    pilot = make_pilot(client, [("THUMBS_UP", 0.45), ("NONE", 0.0), ("POINT_LEFT", 0.9)],
                        cooldown=10.0)
     pilot.step(HAND, "Right", now=0.0)
     pilot.step(None, None, now=0.5)
     assert pilot.step(HAND, "Right", now=1.0) is None  # different gesture, still in cooldown
-    assert "stop" not in client.names()
+    assert "move" not in client.names()
 
 
 def test_confirmation_tracker_state_machine():
@@ -614,7 +625,8 @@ def test_log_has_the_contract_columns(tmp_path):
     header = next(csv.reader(open(tmp_path / "x.csv", encoding="utf-8")))
     assert header == ["timestamp", "gesture", "confidence", "sonar_left", "sonar_right",
                       "hand_size", "moving", "standing", "requested_intent", "action", "params",
-                      "reason", "eye_color", "overridden", "bridge_ok", "simulated", "latency_ms"]
+                      "reason", "eye_color", "overridden", "bridge_ok", "simulated", "latency_ms",
+                      "mode", "input", "bridge_error"]
 
 
 # ------------------------------------------------- virtual sonar (Choregraphe)

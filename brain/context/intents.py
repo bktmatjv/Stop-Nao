@@ -16,7 +16,7 @@ GESTURE_TO_INTENT = {
     "OPEN_PALM": "STOP",
     "POINT_LEFT": "TURN_LEFT",
     "POINT_RIGHT": "TURN_RIGHT",
-    "VICTORY": "WAVE",
+    "VICTORY": None,  # toggles the input source (handled by the Pilot); WAVE is voice-only now
     "FIST": "TOGGLE_POSTURE",
     "TWO_FINGERS": "GREET",
     "NONE": None,
