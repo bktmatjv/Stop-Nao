@@ -52,6 +52,7 @@ from sklearn.model_selection import (  # noqa: E402
 from sklearn.pipeline import Pipeline  # noqa: E402
 from sklearn.preprocessing import LabelEncoder, StandardScaler  # noqa: E402
 
+from . import LABELS  # noqa: E402
 from .features import (  # noqa: E402
     FEATURE_NAMES,
     LANDMARK_COLUMNS,
@@ -173,6 +174,25 @@ def _jsonable(obj):
     return obj
 
 
+def love_you_victory_confusion(cm, labels, model_title, figure_path) -> dict:
+    """Confusion between LOVE_YOU and VICTORY on the test split (rate None if a class is absent/unsupported)."""
+    out = {"model": model_title, "figure": str(figure_path), "rate": None,
+           "love_you_as_victory": None, "victory_as_love_you": None}
+    if "LOVE_YOU" not in labels or "VICTORY" not in labels:
+        return out
+    cm = np.asarray(cm)
+    li, vi = labels.index("LOVE_YOU"), labels.index("VICTORY")
+    n_l, n_v = int(cm[li].sum()), int(cm[vi].sum())
+    if n_l:
+        out["love_you_as_victory"] = float(cm[li, vi] / n_l)
+    if n_v:
+        out["victory_as_love_you"] = float(cm[vi, li] / n_v)
+    if n_l + n_v:
+        out["rate"] = float((cm[li, vi] + cm[vi, li]) / (n_l + n_v))
+    out["support"] = {"LOVE_YOU": n_l, "VICTORY": n_v}
+    return out
+
+
 # --------------------------------------------------------------------------- plots
 def plot_confusion(cm, labels, title, path):
     fig, ax = plt.subplots(figsize=(6.5, 5.5))
@@ -277,6 +297,14 @@ def train(args: argparse.Namespace) -> dict:
     if len(labels) < 2:
         raise RuntimeError(f"need at least 2 classes, found {labels}")
     used_df = pd.DataFrame({"person": groups, "label": y_str})
+    missing_labels = [l for l in LABELS if l not in labels]
+    if missing_labels:
+        warnings.warn(
+            f"No usable data for label(s) {missing_labels}: they will not be in the model. "
+            "Record them with brain.gestures.capture and retrain.",
+            stacklevel=2,
+        )
+        print(f"WARNING: no data for labels {missing_labels}; training without them.")
 
     persons = sorted(set(groups))
     use_groups = len(persons) >= 3
@@ -364,6 +392,17 @@ def train(args: argparse.Namespace) -> dict:
         MODEL_TITLES[best_key], fig_dir / "gesture_learning_curve.png", args.n_jobs, seed,
     )
 
+    cm_fig = fig_dir / ("gesture_cm_rf.png" if best_key == "random_forest" else "gesture_cm_svm.png")
+    ly_v = love_you_victory_confusion(best_res["confusion_matrix"], labels, best_res["model"], cm_fig)
+    if ly_v["rate"] is None:
+        print("LOVE_YOU<->VICTORY confusion: n/a (a class has no test samples or no data).")
+    else:
+        print(
+            f"LOVE_YOU<->VICTORY confusion ({best_res['model']}, test person): rate={ly_v['rate']:.3f} "
+            f"(LOVE_YOU->VICTORY {ly_v['love_you_as_victory']}, VICTORY->LOVE_YOU {ly_v['victory_as_love_you']}); "
+            f"matrix: {cm_fig}"
+        )
+
     # Final model: fitted on the training split (so reported metrics describe it),
     # unless --refit-all asks for training on every person for deployment.
     final = clone(searches[best_key].best_estimator_)
@@ -395,6 +434,8 @@ def train(args: argparse.Namespace) -> dict:
         "test_size": int(len(X_te)),
         "inference_ms_per_sample": best_res["inference_ms_per_sample"],
         "labels": labels,
+        "missing_labels": missing_labels,
+        "love_you_victory_confusion": ly_v,
         "split": {
             "strategy": strategy,
             "persons": persons,
