@@ -1,0 +1,13 @@
+timestamp,gesture,confidence,sonar_left,sonar_right,hand_size,moving,standing,requested_intent,action,params,reason,eye_color,overridden,bridge_ok,simulated,latency_ms,mode,input,bridge_error
+2026-11-11T22:27:08.650,OPEN_PALM,0.962,1.500,1.500,0.350,0,1,STOP,STOP,{},Me detengo.,green,0,1,1,406.6,MOVEMENT,GESTURES,
+2026-11-11T22:27:16.716,THUMBS_UP,0.942,1.500,1.500,0.177,0,1,ADVANCE,ADVANCE,"{""x"": 0.35}","Avanzo, el camino está libre.",green,0,1,1,250.1,MOVEMENT,GESTURES,
+2026-11-11T22:27:20.587,LOVE_YOU,0.978,1.500,1.500,0.251,1,1,CELEBRATE,CELEBRATE,{},¡Somos los campeones!,blue,0,1,0,1.9,MOVEMENT,GESTURES,
+2026-11-11T22:27:25.226,FIST,0.679,1.500,1.500,0.119,1,1,SIT,WARN_MUST_STOP,{},Me estoy moviendo. Primero debo detenerme para sentarme.,red,1,1,1,416.2,MOVEMENT,GESTURES,
+2026-11-11T22:27:34.950,THUMBS_UP,0.881,1.500,1.500,0.239,0,0,ADVANCE,WARN_MUST_STAND,{},Primero debo ponerme de pie.,yellow,1,1,1,219.1,MOVEMENT,GESTURES,
+2026-11-11T22:27:38.250,FIST,0.717,1.500,1.500,0.217,0,0,STAND,STAND,{},Me pongo de pie y estoy listo.,white,0,1,1,2516.1,MOVEMENT,GESTURES,
+2026-11-11T22:27:43.910,THUMBS_UP,0.745,1.500,1.500,0.212,0,1,ADVANCE,ADVANCE,"{""x"": 0.35}","Avanzo, el camino está libre.",green,0,1,1,219.2,MOVEMENT,GESTURES,
+2026-11-11T22:27:53.215,FIST,0.748,1.500,1.500,0.210,1,1,SIT,WARN_MUST_STOP,{},Me estoy moviendo. Primero debo detenerme para sentarme.,red,1,1,1,218.2,MOVEMENT,GESTURES,
+2026-11-11T22:27:58.034,LOVE_YOU,0.977,1.500,1.500,0.263,0,1,CELEBRATE,CELEBRATE,{},¡Somos los campeones!,blue,0,1,0,1.8,MOVEMENT,GESTURES,
+2026-11-11T22:28:00.567,LOVE_YOU,0.976,1.500,1.500,0.275,0,1,CELEBRATE,CELEBRATE,{},¡Somos los campeones!,blue,0,1,0,1.2,MOVEMENT,GESTURES,
+2026-11-11T22:28:17.805,OPEN_PALM,0.979,1.500,1.500,0.328,0,1,STOP,STOP,{},Me detengo.,green,0,1,1,219.3,MOVEMENT,GESTURES,
+2026-11-11T22:28:20.115,POINT_LEFT,0.911,1.500,1.500,0.167,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,cyan,0,1,1,203.1,MOVEMENT,GESTURES,

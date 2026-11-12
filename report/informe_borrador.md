@@ -139,7 +139,7 @@ La siguiente tabla resume las clases de gesto, fijadas antes de la recolección 
 | `OPEN_PALM` | [[PENDIENTE: describir el gesto acordado (palma abierta hacia la cámara)]] | Detenerse |
 | `POINT_LEFT` | [[PENDIENTE: describir el gesto acordado (índice señalando al lado izquierdo de la persona)]] | Girar |
 | `POINT_RIGHT` | [[PENDIENTE: describir el gesto acordado (índice señalando al lado derecho de la persona)]] | Girar |
-| `VICTORY` | [[PENDIENTE: describir el gesto acordado (índice y medio extendidos en V)]] | Saludar con el brazo |
+| `VICTORY` | [[PENDIENTE: describir el gesto acordado (índice y medio extendidos en V)]] | Alternar la entrada entre gestos y voz (sección 3.g) |
 | `FIST` | [[PENDIENTE: describir el gesto acordado (puño cerrado)]] | Sentarse o ponerse de pie (alterna) |
 | `NONE` | [[PENDIENTE: describir la mano en reposo, transiciones y posturas no reconocibles incluidas]] | Ninguna |
 
@@ -169,6 +169,8 @@ Una división aleatoria de filas sería inapropiada: los fotogramas consecutivos
 - **Contexto:** los grupos son los escenarios (`scenario_id`), de modo que ninguna variante de un mismo escenario aparezca a la vez en entrenamiento y prueba.
 
 Esquema exacto de evaluación (validación anidada con ajuste interno, o conjunto de prueba reservado): [[PENDIENTE: confirmar según el código de entrenamiento de brain/gestures y brain/context]]. Se reporta la media y la desviación estándar de las métricas entre particiones.
+
+**Nota de versión.** Las métricas de esta sección corresponden a las siete clases originales. La clase `LOVE_YOU` se añadió después y se evaluará en la sección 3.h con el mismo esquema.
 
 ### e. Entrenamiento y ajuste de hiperparámetros
 
@@ -220,7 +222,7 @@ Las métricas reportadas son exactitud (*accuracy*), F1 macro, matriz de confusi
 | `OPEN_PALM` | Detenerse | `stopMove` |
 | `POINT_LEFT` | Girar hacia lo señalado | El robot gira a su derecha (0.785 rad, 45°) |
 | `POINT_RIGHT` | Girar hacia lo señalado | El robot gira a su izquierda (0.785 rad, 45°) |
-| `VICTORY` | Saludar | Saludo con el brazo derecho |
+| `VICTORY` | Alternar entrada gestos / voz | Ninguno: cambia el canal de órdenes, no mueve al robot (sección 3.g) |
 | `FIST` | Sentarse o pararse | Alterna entre sentado y de pie |
 | `NONE` | Ninguna | No hace nada |
 
@@ -248,6 +250,22 @@ Una lectura de sonar inválida (menor o igual que cero, o no numérica) se trata
 $$\hat{y}_t = \arg\max_{c} \sum_{k=t-T+1}^{t} \mathbb{1}\left[ \hat{y}_k = c \right]$$
 
 junto con su confianza. Para que un gesto sostenido no dispare órdenes continuas, tras ejecutar una acción se aplica un periodo de espera (*cooldown*) de [[PENDIENTE: segundos, según brain/main.py]] antes de aceptar otra orden. Estos mecanismos introducen una latencia deliberada a cambio de estabilidad, cuyo efecto se mide en la Sección 4.c.
+
+### g. Arquitectura multimodal: gestos y voz, con dos modos
+
+El sistema combina dos canales de entrada que producen intenciones del mismo vocabulario compartido (`brain/vocab.py`): los gestos, clasificados por el modelo de la sección 3.e, y la voz, transcrita y clasificada con Groq (sección 3.i). Se definen dos ejes independientes: el **modo** (MOVIMIENTO o MÚSICA) y la **entrada** (GESTOS o VOZ). El mismo gesto tiene significados distintos según el modo: `THUMBS_UP` avanza en MOVIMIENTO y reproduce música en MÚSICA.
+
+Dos controles funcionan en cualquier combinación, para que el usuario nunca quede atrapado en un canal y la parada no dependa de la voz: `VICTORY` alterna la entrada y `OPEN_PALM` detiene de inmediato movimiento, baile, habla y música. El cambio de modo exige sostener dos pulgares arriba durante unos 1 s, para evitar cambios accidentales. Cada cambio de estado se confirma hablando y con el color de los ojos (azul en MOVIMIENTO, morado en MÚSICA), y los LED de las orejas indican que la entrada es voz. La voz se procesa en un hilo propio: la cámara y la parada siguen respondiendo mientras se transcribe.
+
+### h. Riesgo de confusión entre LOVE_YOU y VICTORY
+
+`LOVE_YOU` (pulgar, índice y meñique extendidos) y `VICTORY` (índice y medio extendidos) comparten el gesto de dedos extendidos y pueden confundirse. `LOVE_YOU` se agregó después de las siete clases originales, por lo que su error se medirá con muestras grabadas por Matías y Vivianne. La métrica se calcula en `brain/gestures/train.py` y se guarda en `report/metrics/gesture_metrics.json`, clave `love_you_victory_confusion`, con las tasas `love_you_as_victory` y `victory_as_love_you`: [[PENDIENTE: valores tras la grabación de LOVE_YOU y el reentrenamiento]].
+
+Mitigación: la opción `--confirm-ambiguous` pide repetir el gesto antes de actuar con cualquiera de los dos. Está desactivada por defecto. Si el error medido resulta alto, la confirmación se activa en la demostración; esa decisión depende del valor medido [[PENDIENTE: decisión del equipo tras la métrica]].
+
+### i. Uso de Groq para la entrada por voz
+
+Al pulsar `v` en entrada VOZ, el audio se graba y se envía a Groq con el modelo Whisper `whisper-large-v3-turbo` (idioma español). La transcripción se clasifica con el modelo `gpt-oss-20b`, con salida JSON restringida a las intenciones de voz permitidas (`vocab.VOICE_INTENTS`), de modo que el modelo no puede proponer una intención fuera de ese conjunto. Si la llamada falla (sin red, clave inválida o tiempo de espera agotado), se usa un respaldo por palabras clave (`brain/voice/keywords.py`). Las llamadas corren en un hilo separado y el ciclo de cámara no espera su respuesta.
 
 ---
 

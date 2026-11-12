@@ -6,7 +6,7 @@
 Usage:
     python -m brain.gestures.make_synthetic --out <dir>
 
-Generates 4 fake persons x 7 labels (2 takes each) of plausible-looking
+Generates 4 fake persons x every label (2 takes each) of plausible-looking
 MediaPipe Hands landmark sequences (same CSV contract as the real dataset)
 plus a ``SYNTHETIC_README.txt`` marker. Persons are named ``synth1..synth4`` so
 they can never be mistaken for the real team members. Odd persons use the
@@ -77,6 +77,8 @@ def _mean_spec(label: str) -> dict:
         return _spec(_THUMB_TUCKED, [_CURL] * 4, _SPREAD_REST, 0.0)
     if label == "TWO_FINGERS":
         return _spec(_THUMB_TUCKED, [_EXT, _EXT, _CURL, _CURL], _SPREAD_REST, 0.0)
+    if label == "LOVE_YOU":  # thumb + index + pinky out, middle and ring curled
+        return _spec(_THUMB_OUT, [_EXT, _CURL, _CURL, _EXT], _SPREAD_WIDE, 0.0)
     raise ValueError(label)
 
 

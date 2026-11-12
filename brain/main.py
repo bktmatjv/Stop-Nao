@@ -35,16 +35,22 @@ import csv
 import json
 import math
 import os
+import queue
 import sys
+import threading
 import time
+import types
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from . import vocab
+from .async_client import AsyncClient, Ticket
+from .config import DEFAULT_ENV_PATH, Config, load_config, parse_env_file
 from .context import FEATURE_COLUMNS
-from .context.safety import MIN_CONF
+from .context.safety import MIN_CONF, Decision, validate
 from .gestures.features import hand_size
-from .music import MusicPlayer
+from .voice.keywords import keyword_intent
 
 NONE_LABEL = "NONE"
 STANDING_POSTURES = ("Stand", "StandInit", "StandZero")
@@ -52,6 +58,7 @@ DEFAULT_COOLDOWN = 2.5  # s between two robot commands
 DEFAULT_CONFIRM_WINDOW = 4.0  # s to repeat a gesture after ASK_CONFIRM
 SPEECH_GAP = 3.0  # s: the same sentence is not spoken twice within this time
 SENSE_INTERVAL = 0.5  # s between sonar refreshes for the overlay
+SENSE_MAX_AGE = 1.0  # s: an older cached sonar reading is treated as invalid (fail safe)
 # The predictor must let low-confidence gestures through so the safety layer
 # can answer ASK_CONFIRM; below this it reports NONE.
 PREDICTOR_MIN_CONF = 0.4
@@ -65,8 +72,16 @@ MOCK_SIT, MOCK_STAND = "Sit", "StandInit"
 LOG_COLUMNS = (
     "timestamp", "gesture", "confidence", "sonar_left", "sonar_right", "hand_size",
     "moving", "standing", "requested_intent", "action", "params", "reason", "eye_color",
-    "overridden", "bridge_ok", "simulated", "latency_ms",
+    "overridden", "bridge_ok", "simulated", "latency_ms", "mode", "input", "bridge_error",
 )
+AMBIGUOUS_GESTURES = ("LOVE_YOU", "VICTORY")  # S9: confusable pair, optional confirmation
+BLINK_INTERVAL = 1.0  # s, minimum gap between two "gesture detected" eye blinks
+DANCE_INTERVAL = 4.0  # s per dance-loop step (each loop_x animation lasts ~4 s)
+MODE_EYES = {vocab.MODE_MOVEMENT: "blue", vocab.MODE_MUSIC: "purple"}
+MODE_SPEECH = {vocab.MODE_MOVEMENT: "Modo movimiento", vocab.MODE_MUSIC: "Modo música"}
+INPUT_SPEECH = {vocab.INPUT_VOICE: "Te escucho por voz", vocab.INPUT_GESTURES: "Volvemos a los gestos"}
+MOVEMENT_INTENTS = (vocab.ADVANCE, vocab.TURN_LEFT, vocab.TURN_RIGHT, vocab.SIT, vocab.STAND,
+                    vocab.TOGGLE_POSTURE, vocab.WAVE)
 EYE_BGR = {  # overlay swatch colours (OpenCV uses BGR)
     "green": (0, 200, 0), "yellow": (0, 220, 255), "red": (0, 0, 230),
     "blue": (230, 100, 0), "white": (255, 255, 255),
@@ -127,6 +142,27 @@ class ExecResult:
     acks: list = field(default_factory=list)
     motion_ack_t: float | None = None  # clock value when the motion command was acknowledged
     simulated: bool = False
+    # Async client only: the commands are queued, so the outcome arrives later.
+    tickets: list = field(default_factory=list)
+    done: bool = True          # False until every queued command has finished
+    cancelled: bool = False    # a queued command was dropped by an emergency stop
+    _lock: object = field(default_factory=threading.Lock, repr=False)
+    _callbacks: list = field(default_factory=list, repr=False)
+
+    def when_done(self, fn) -> None:
+        """Call ``fn(result)`` once the outcome is final (at once for a synchronous client)."""
+        with self._lock:
+            if not self.done:
+                self._callbacks.append(fn)
+                return
+        fn(self)
+
+    def _mark_done(self) -> None:
+        with self._lock:
+            self.done = True
+            callbacks, self._callbacks = self._callbacks, []
+        for fn in callbacks:
+            fn(self)
 
 
 class Executor:
@@ -138,11 +174,13 @@ class Executor:
     """
 
     def __init__(self, client, speech: SpeechGate | None = None, clock=time.perf_counter,
-                 music: MusicPlayer | None = None):
+                 music=None, on_halt=None):
+        # ``music`` is accepted for compatibility and ignored: the executor never plays audio
+        # (the DJPlayer is the only audio source). ``on_halt`` runs on every safety stop.
         self.client = client
         self.speech = speech or SpeechGate()
         self.clock = clock
-        self.music = music or MusicPlayer()
+        self.on_halt = on_halt
 
     def execute(self, decision, moving: bool, now: float | None = None) -> ExecResult:
         now = self.clock() if now is None else now
@@ -150,6 +188,9 @@ class Executor:
 
         def send(ack: dict) -> dict:
             result.acks.append(ack)
+            if isinstance(ack, Ticket):  # queued on the async worker: outcome comes later
+                result.tickets.append(ack)
+                return ack
             result.simulated = result.simulated or bool(ack.get("simulated"))
             if not ack.get("ok"):
                 result.errors.append(str(ack.get("error", "unknown error")))
@@ -159,14 +200,14 @@ class Executor:
         warn = action.startswith("WARN_")
         if action in ("STOP", "SIT", "STAND") or (warn and moving):
             send(self.client.stop())
-            self.music.stop()
+            if self.on_halt is not None:
+                self.on_halt()
         send(self.client.eyes(decision.eye_color))
         if action in ("ADVANCE", "ADVANCE_SHORT"):
             send(self.client.move(float(params["x"]), 0.0))
         elif action in ("TURN_LEFT", "TURN_RIGHT"):
             send(self.client.move(0.0, float(params["theta"])))
         elif action in ("WAVE", "DANCE"):
-            self.music.play_random()
             if hasattr(self.client, "dance"):
                 send(self.client.dance())
             else:
@@ -183,6 +224,11 @@ class Executor:
         # ASK_CONFIRM / WAIT / WARN_*: no motion
         result.motion_ack_t = self.clock()
 
+        if result.tickets:
+            result.done = False
+            self._settle(decision, result, now)
+            return result
+
         if result.errors:
             result.ok = False
             print(f"WARNING: bridge refused a command: {'; '.join(result.errors)}", file=sys.stderr)
@@ -193,6 +239,40 @@ class Executor:
         if text and self.speech.allow(text, now):
             self.client.say(text)
         return result
+
+
+    def _settle(self, decision, result: ExecResult, now: float) -> None:
+        """Async client: once every queued command finished, apply the refusal feedback.
+
+        Same outcome as the synchronous path: a refused command turns the eyes red and
+        speaks the error instead of the reason. Runs on the worker thread (or at once).
+        """
+        tickets = list(result.tickets)
+        remaining = [len(tickets)]
+        lock = threading.Lock()
+
+        def one_done(_ticket) -> None:
+            with lock:
+                remaining[0] -= 1
+                if remaining[0]:
+                    return
+            result.errors = [t.error for t in tickets if t.error and not t.cancelled]
+            result.cancelled = any(t.cancelled for t in tickets)
+            result.ok = not result.errors and not result.cancelled
+            result.simulated = any(isinstance(t.response, dict) and t.response.get("simulated")
+                                   for t in tickets)
+            text = None if result.cancelled and not result.errors else decision.reason
+            if result.errors:
+                print(f"WARNING: bridge refused a command: {'; '.join(result.errors)}",
+                      file=sys.stderr)
+                _call(self.client, "eyes", "red")
+                text = ERROR_SPEECH
+            if text and self.speech.allow(text, now):
+                _call(self.client, "say", text)
+            result._mark_done()
+
+        for ticket in tickets:
+            ticket.add_done_callback(one_done)
 
 
 class ConfirmationTracker:
@@ -239,6 +319,9 @@ class DecisionRecord:
     simulated: bool
     latency_ms: float
     explain: str = ""
+    mode: str = vocab.MODE_MOVEMENT
+    input_mode: str = vocab.INPUT_GESTURES
+    bridge_error: str = ""
 
     def row(self) -> list:
         ctx, dec = self.context, self.decision
@@ -248,7 +331,7 @@ class DecisionRecord:
             ctx["moving"], ctx["standing"], self.requested_intent, dec.action,
             json.dumps(dec.params, sort_keys=True), dec.reason, dec.eye_color,
             int(bool(dec.overridden)), int(self.bridge_ok), int(self.simulated),
-            f"{self.latency_ms:.1f}",
+            f"{self.latency_ms:.1f}", self.mode, self.input_mode, self.bridge_error,
         ]
 
 
@@ -270,6 +353,8 @@ class DecisionLogger:
         self._fh.flush()
 
     def log(self, record: DecisionRecord) -> None:
+        if self._fh.closed:
+            return
         self._writer.writerow(record.row())
         self._fh.flush()
 
@@ -278,15 +363,72 @@ class DecisionLogger:
             self._fh.close()
 
 
-class Pilot:
-    """Gesture -> decision -> robot state machine (no camera, no I/O besides the client).
+def _call(client, name: str, *args):
+    """Call an optional client method; a missing method or a failure is reported, never raised."""
+    fn = getattr(client, name, None)
+    if fn is None:
+        return None
+    try:
+        return fn(*args)
+    except Exception as exc:  # the bridge may be flaky; feedback must not crash the loop
+        print(f"WARNING: {name} failed: {exc}", file=sys.stderr)
+        return None
 
-    A command fires when the stable gesture is not ``NONE``, differs from the
-    gesture that last produced a command (reset whenever ``NONE`` is seen) and
-    ``cooldown`` seconds have passed since the previous command. A gesture that
-    is held fires once; one suppressed by the cooldown fires as soon as it ends
-    if it is still held. A pending ``ASK_CONFIRM`` bypasses edge and cooldown
-    when the same gesture comes back with confidence >= ``MIN_CONF`` in time.
+
+class DanceLoop:
+    """Cycles ``dance(loop_a..loop_d)`` while active; driven by ``tick(now)``, never sleeps."""
+
+    STYLES = ("loop_a", "loop_b", "loop_c", "loop_d")
+
+    def __init__(self, client, interval: float = DANCE_INTERVAL, styles=STYLES):
+        self.client = client
+        self.interval = interval
+        self.styles = tuple(styles)
+        self.active = False
+        self._index = 0
+        self._next_at = 0.0
+
+    def start(self, now: float) -> None:
+        if self.active:
+            return
+        self.active = True
+        self._index = 0
+        _call(self.client, "dance", self.styles[0])
+        self._next_at = now + self.interval
+
+    def tick(self, now: float) -> None:
+        if not self.active or now < self._next_at:
+            return
+        self._index = (self._index + 1) % len(self.styles)
+        _call(self.client, "dance", self.styles[self._index])
+        self._next_at = now + self.interval
+
+    def stop(self, send_stop: bool = True) -> None:
+        was_active, self.active = self.active, False
+        if was_active and send_stop:
+            _call(self.client, "stop")
+
+
+class Pilot:
+    """Gesture/voice -> decision -> robot state machine (no camera, no I/O besides the client).
+
+    Two axes: ``mode`` (MOVEMENT / MUSIC) and ``input`` (GESTURES / VOICE).
+
+    A gesture command fires when the stable gesture is not ``NONE``, differs from
+    the gesture that last produced a command (reset whenever ``NONE`` is seen)
+    and ``cooldown`` seconds have passed since the previous command. A gesture
+    that is held fires once; one suppressed by the cooldown fires as soon as it
+    ends if it is still held. A pending ``ASK_CONFIRM`` bypasses edge and
+    cooldown when the same gesture comes back with confidence >= ``MIN_CONF`` in
+    time. ``OPEN_PALM`` (e-stop) always fires on its rising edge, ignoring the
+    cooldown and the input source. While input is VOICE only ``VICTORY`` and
+    ``OPEN_PALM`` are honoured from gestures; voice intents are ignored while
+    input is GESTURES.
+
+    Movement intents from gestures go through the ``decider`` (model + safety);
+    voice movement intents go through ``safety.validate`` directly. LOVE_YOU
+    and music intents are not sonar gated. ``step`` also services the dance
+    loop and the voice queue, so one call per camera frame drives everything.
 
     ``latency_ms`` = stable gesture (command triggered) -> bridge ack of the
     motion command: sense + context + decide + act.
@@ -297,18 +439,39 @@ class Pilot:
                  logger: DecisionLogger | None = None,
                  sense_interval: float | None = SENSE_INTERVAL,
                  sonar_override: "VirtualSonar | None" = None,
-                 music: MusicPlayer | None = None):
+                 music=None, dj=None, predictor2=None, hold=None,
+                 voice=None, confirm_ambiguous: bool = False,
+                 blink_interval: float = BLINK_INTERVAL, dance_interval: float = DANCE_INTERVAL,
+                 sense_max_age: float = SENSE_MAX_AGE):
         self.client = client
+        self._async = bool(getattr(client, "is_async", False))  # AsyncClient: never blocks
+        self.sense_max_age = sense_max_age
+        self._log_lock = threading.Lock()
+        self._log_queue: list = []  # [record, ready] in decision order; flushed head-first
         self.sonar_override = sonar_override
         self.predictor = predictor
+        self.predictor2 = predictor2  # second hand; enables the two-hands mode toggle
+        if hold is None and predictor2 is not None:
+            from .gestures.two_hands import TwoHandsHold
+            hold = TwoHandsHold("THUMBS_UP", clock=clock)
+        self.hold = hold
         self.decider = decider
         self.cooldown = cooldown
         self.clock = clock
         self.logger = logger
         self.sense_interval = sense_interval
-        self.music = music or MusicPlayer()
-        self.executor = Executor(client, clock=clock, music=self.music)
+        self.dj = dj
+        self.dance = DanceLoop(client, dance_interval)
+        self.voice = voice
+        self.confirm_ambiguous = confirm_ambiguous
+        self.blink_interval = blink_interval
+        self.executor = Executor(client, clock=clock, on_halt=self._halt_media)
         self.confirm = ConfirmationTracker(confirm_window)
+        self.mode = vocab.MODE_MOVEMENT
+        self.input_mode = vocab.INPUT_GESTURES
+        self.mic_open = False
+        self.voice_status = ""
+        self.voice_queue: queue.Queue = queue.Queue()
         self.gesture = NONE_LABEL
         self.confidence = 0.0
         self.sense: dict | None = None  # last good sense reading (overlay)
@@ -317,6 +480,13 @@ class Pilot:
         self._acted: str | None = None
         self._last_fire: float | None = None
         self._last_sense_t: float | None = None
+        self._prev_label = NONE_LABEL
+        self._last_blink: float | None = None
+
+    # ---------------------------------------------------------------- helpers
+    @property
+    def eye_color(self) -> str:
+        return MODE_EYES[self.mode]
 
     def cooldown_remaining(self, now: float | None = None) -> float:
         if self._last_fire is None:
@@ -324,8 +494,17 @@ class Pilot:
         now = self.clock() if now is None else now
         return max(0.0, self.cooldown - (now - self._last_fire))
 
+    def _cached_sense(self) -> dict:
+        """Newest background reading of the async client; stale or missing counts as invalid."""
+        reading, age = self.client.latest_sense()
+        if reading is None or age is None:
+            return {"ok": False, "error": "no sonar reading yet"}
+        if age > self.sense_max_age:
+            return {"ok": False, "error": "stale sonar reading (%.1f s old)" % age}
+        return reading
+
     def _read_sense(self, now: float) -> dict:
-        reading = self.client.sense()
+        reading = self._cached_sense() if self._async else self.client.sense()
         if reading.get("ok") and self.sonar_override is not None:
             reading = self.sonar_override.patch(reading)
         if reading.get("ok"):
@@ -336,29 +515,280 @@ class Pilot:
     def _refresh_sense(self, now: float) -> None:
         if self.sense_interval is None:
             return
+        if self._async:
+            self._read_sense(now)  # cache lookup only, no I/O
+            return
         if self._last_sense_t is None or now - self._last_sense_t >= self.sense_interval:
             self._read_sense(now)
 
-    def step(self, landmarks, handedness=None, now: float | None = None) -> DecisionRecord | None:
-        """Process one frame (``landmarks`` is a (21, 3) array or None)."""
+    def _bridge_error(self) -> str:
+        error = getattr(self.client, "last_error", None)
+        return error if isinstance(error, str) else ""
+
+    def _say(self, text: str, now: float) -> None:
+        if text and self.executor.speech.allow(text, now):
+            _call(self.client, "say", text)
+
+    # ------------------------------------------------------------ state axes
+    def announce_state(self) -> None:
+        """Set eyes and ear LEDs to match the current state (no speech)."""
+        _call(self.client, "eyes", self.eye_color)
+        _call(self.client, "ears", self.input_mode == vocab.INPUT_VOICE)
+
+    def set_mode(self, mode: str, now: float) -> str:
+        """Switch MOVEMENT/MUSIC with feedback; leaving MUSIC stops music and the dance loop."""
+        if mode == self.mode:
+            return MODE_SPEECH[mode]
+        self.mode = mode
+        if mode == vocab.MODE_MOVEMENT:
+            self.stop_media()
+        self.confirm.clear()
+        _call(self.client, "eyes", self.eye_color)
+        self._say(MODE_SPEECH[mode], now)
+        return MODE_SPEECH[mode]
+
+    def set_input(self, input_mode: str, now: float) -> str:
+        """Switch GESTURES/VOICE with feedback (ear LEDs on while listening)."""
+        if input_mode == self.input_mode:
+            return INPUT_SPEECH[input_mode]
+        self.input_mode = input_mode
+        if input_mode != vocab.INPUT_VOICE and self.mic_open:
+            self.mic_open = False
+            if self.voice is not None:
+                try:
+                    self.voice.end()
+                except Exception:
+                    pass
+        _call(self.client, "ears", input_mode == vocab.INPUT_VOICE)
+        _call(self.client, "eyes", self.eye_color)
+        self._say(INPUT_SPEECH[input_mode], now)
+        return INPUT_SPEECH[input_mode]
+
+    # ------------------------------------------------------------ media / stop
+    def _halt_media(self) -> None:
+        """Pause the music and stop the dance loop (no robot command)."""
+        if self.dj is not None and self.dj.is_playing:
+            self.dj.pause()
+        self.dance.stop(send_stop=False)
+
+    def emergency_stop(self) -> None:
+        """Instant e-stop: robot stop (motion, dance, speech), music pause, dance loop off."""
+        self.client.stop()
+        self._halt_media()
+
+    def stop_media(self) -> None:
+        """Stop the music and the dance loop completely (also used on shutdown)."""
+        if self.dj is not None:
+            self.dj.stop()
+        self.dance.stop()
+
+    # ------------------------------------------------------------------ voice
+    def post_voice(self, intent: str, text: str = "") -> None:
+        """Thread-safe: queue an intent from the voice thread for the main loop."""
+        self.voice_queue.put((intent, text))
+
+    def post_voice_text(self, text: str) -> None:
+        """Queue the keyword-fallback intent of an already transcribed sentence."""
+        self.post_voice(keyword_intent(text), text)
+
+    def toggle_mic(self) -> bool:
+        """Push-to-talk toggle (key ``v``): first call starts recording, second sends it."""
+        if self.input_mode != vocab.INPUT_VOICE:
+            return False
+        if self.voice is None:
+            self.voice_status = "Voz no disponible"
+            return False
+        try:
+            if not self.mic_open:
+                if getattr(self.voice, "busy", False):
+                    self.voice_status = "Espera: procesando la voz anterior"
+                    return False
+                self.voice.begin()
+                self.mic_open = True
+                self.voice_status = "Grabando... (v para enviar)"
+            else:
+                self.voice.end()
+                self.mic_open = False
+                self.voice_status = "Procesando..."
+        except Exception as exc:  # no mic / no sounddevice: report on the overlay, keep running
+            self.mic_open = False
+            self.voice_status = f"Error de microfono: {exc}"
+            return False
+        return True
+
+    def _drain_voice(self, now: float) -> None:
+        while True:
+            try:
+                intent, text = self.voice_queue.get_nowait()
+            except queue.Empty:
+                return
+            if self.input_mode != vocab.INPUT_VOICE:
+                continue
+            self.voice_status = f"Oido: '{text}' -> {intent}"
+            if intent in vocab.VOICE_INTENTS and intent != vocab.UNKNOWN:
+                self.handle_intent(intent, now)
+
+    def tick(self, now: float) -> None:
+        """Service the dance loop and the voice queue (call once per frame)."""
+        self.dance.tick(now)
+        if self.dance.active and self.dj is not None and not self.dj.is_playing:
+            self.dance.stop()  # the music ended or was paused elsewhere
+        self._drain_voice(now)
+
+    # ----------------------------------------------------------------- intents
+    def handle_intent(self, intent: str, now: float | None = None, conf: float = 1.0,
+                      label: str = "VOICE", size: float = 0.0) -> DecisionRecord | None:
+        """Run one intent (voice, or a non-decider gesture) and log it."""
+        now = self.clock() if now is None else now
+        t0 = self.clock()
+        outcome = self._apply_intent(intent, now, conf, label, size)
+        if outcome is None:
+            return None
+        decision, ctx, ok, requested, result = outcome
+        return self._record(label, conf, ctx, requested, decision, ok, False,
+                            (self.clock() - t0) * 1000.0, result=result)
+
+    def _apply_intent(self, intent: str, now: float, conf: float, label: str, size: float):
+        """-> (decision, ctx, ok, requested) or None when the intent is not actionable."""
+        if intent in MOVEMENT_INTENTS:
+            sense = self._read_sense(now)
+            ctx = build_context(label, conf, sense, size)
+            action = intent
+            if intent == vocab.TOGGLE_POSTURE:
+                action = vocab.SIT if ctx["standing"] else vocab.STAND
+            decision = validate(action, ctx)
+            result = self.executor.execute(decision, moving=bool(ctx["moving"]), now=now)
+            return decision, ctx, bool(sense.get("ok")) and result.ok, action, result
+        ctx = build_context(label, conf, self.sense or {"ok": False}, size)
+        spoken = False
+        if intent == vocab.STOP:
+            self.emergency_stop()
+            text = "Me detengo."
+        elif intent == vocab.CELEBRATE:
+            text, spoken = self._celebrate(now), True
+        elif intent == vocab.MUSIC_PLAY:
+            text, spoken = self._music_play(now), True
+        elif intent == vocab.MUSIC_PAUSE:
+            if self.dj is not None:
+                self.dj.pause()
+            self.dance.stop()
+            text, spoken = "Música en pausa.", True
+        elif intent in (vocab.MUSIC_NEXT, vocab.MUSIC_PREV):
+            ok = False
+            if self.dj is not None:
+                ok = self.dj.next() if intent == vocab.MUSIC_NEXT else self.dj.previous()
+            if not ok:
+                text = "No hay canciones."
+            else:
+                text = "Siguiente canción." if intent == vocab.MUSIC_NEXT else "Canción anterior."
+                if self.dj.is_playing:
+                    self.dance.start(now)  # no-op when the loop is already running
+            spoken = True
+        elif intent == vocab.MUSIC_STOP:
+            if self.dj is not None:
+                self.dj.stop()
+            self.dance.stop()
+            text, spoken = "Música detenida.", True
+        elif intent == vocab.TOGGLE_MODE:
+            text = self.set_mode(vocab.MODE_MUSIC if self.mode == vocab.MODE_MOVEMENT
+                                 else vocab.MODE_MOVEMENT, now)
+        elif intent == vocab.SET_MODE_MUSIC:
+            text = self.set_mode(vocab.MODE_MUSIC, now)
+        elif intent == vocab.SET_MODE_MOVEMENT:
+            text = self.set_mode(vocab.MODE_MOVEMENT, now)
+        elif intent == vocab.TOGGLE_INPUT:
+            text = self.set_input(vocab.INPUT_GESTURES if self.input_mode == vocab.INPUT_VOICE
+                                  else vocab.INPUT_VOICE, now)
+        elif intent == vocab.SET_INPUT_VOICE:
+            text = self.set_input(vocab.INPUT_VOICE, now)
+        elif intent == vocab.SET_INPUT_GESTURES:
+            text = self.set_input(vocab.INPUT_GESTURES, now)
+        else:
+            return None
+        if spoken:
+            self._say(text, now)
+        return Decision(intent, {}, text, self.eye_color), ctx, True, intent, None
+
+    def _music_play(self, now: float) -> str:
+        if self.dj is None or not self.dj.play():
+            return "No hay canciones para reproducir."
+        self.dance.start(now)
+        return "¡Música!"
+
+    def _celebrate(self, now: float) -> str:
+        """We Are the Champions + special dance; the dance loop gives way to it."""
+        self.dance.stop()  # sends stop so the champions dance does not overlap a loop step
+        if self.dj is not None:
+            self.dj.play_champions()
+        _call(self.client, "dance", "champions")
+        return "¡Somos los campeones!"
+
+    # -------------------------------------------------------------------- step
+    def step(self, landmarks, handedness=None, now: float | None = None,
+             second=None) -> DecisionRecord | None:
+        """Process one frame (``landmarks`` is a (21, 3) array or None).
+
+        ``second`` is an optional ``(landmarks, handedness)`` of a second hand.
+        """
         now = self.clock() if now is None else now
         label, conf = self.predictor.update(landmarks, handedness)
+        label2 = None
+        if self.predictor2 is not None:
+            label2 = self.predictor2.update(*(second if second is not None else (None, None)))[0]
         self.gesture, self.confidence = label, conf
         size = hand_size(landmarks) if landmarks is not None else 0.0
 
         if self.confirm.expire(now):
-            self.client.eyes("blue")  # the question went unanswered: back to listening
+            _call(self.client, "eyes", self.eye_color)  # unanswered question: back to the mode colour
         self._refresh_sense(now)
+        self.tick(now)
+
+        if label != NONE_LABEL and self._prev_label == NONE_LABEL and (
+                self._last_blink is None or now - self._last_blink >= self.blink_interval):
+            self._last_blink = now
+            _call(self.client, "blink")
+        self._prev_label = label
+
+        if self.hold is not None:
+            labels = ([label] if landmarks is not None else []) + (
+                [label2] if second is not None else [])
+            if self.hold.update(labels, now):
+                self._acted, self._last_fire = label, now
+                return self.handle_intent(vocab.TOGGLE_MODE, now, conf, label, size)
+            if len(labels) >= 2 and all(item == self.hold.label for item in labels):
+                self._acted = label  # both hands up: the single-hand pipeline stays silent
+                return None
 
         if label == NONE_LABEL:
             self._acted = None
             return None
         confirming = self.confirm.matches(label, conf, now)
-        if not confirming and (label == self._acted or self.cooldown_remaining(now) > 0.0):
+        palm = label == "OPEN_PALM" and label != self._acted
+        voice_only = self.input_mode == vocab.INPUT_VOICE
+        if voice_only and label not in vocab.ALWAYS_ACTIVE_GESTURES:
+            return None
+        if palm and (self.mode == vocab.MODE_MUSIC or voice_only):
+            self._acted, self._last_fire = label, now
+            return self.handle_intent(vocab.STOP, now, conf, label, size)
+        if not confirming and not palm and (label == self._acted
+                                            or self.cooldown_remaining(now) > 0.0):
             return None
         return self._fire(label, conf, size, now, confirming)
 
-    def _fire(self, label: str, conf: float, size: float, now: float, confirming: bool) -> DecisionRecord:
+    def _special_intent(self, label: str) -> str | None:
+        """Intent of a gesture handled outside the decider (None = decider)."""
+        if label in ("VICTORY", "LOVE_YOU"):
+            return vocab.MOVEMENT_GESTURES[label]
+        if self.mode == vocab.MODE_MUSIC:
+            return vocab.MUSIC_GESTURES.get(label, vocab.UNKNOWN)
+        return None
+
+    def _fire(self, label: str, conf: float, size: float, now: float, confirming: bool):
+        intent = self._special_intent(label)
+        if intent is not None:
+            return self._fire_special(intent, label, conf, size, now, confirming)
+        if label == "OPEN_PALM":
+            self._halt_media()
         t0 = self.clock()
         sense = self._read_sense(now)
         ctx = build_context(label, conf, sense, size)
@@ -382,21 +812,75 @@ class Pilot:
             self.confirm.ask(label, now)
         else:
             self.confirm.clear()
+        return self._record(
+            label, conf, ctx, requested or "", decision,
+            bool(sense.get("ok")) and result.ok,
+            bool(sense.get("simulated")) or bool(sense.get("virtual_sonar")) or result.simulated,
+            latency_ms, self.last_explain, result=result)
 
+    def _fire_special(self, intent: str, label: str, conf: float, size: float, now: float,
+                      confirming: bool):
+        t0 = self.clock()
+        self._acted = label
+        if intent == vocab.UNKNOWN:  # a movement gesture with no meaning in MUSIC mode
+            return None
+        self._last_fire = now
+        ask = conf < MIN_CONF or (self.confirm_ambiguous and label in AMBIGUOUS_GESTURES
+                                  and not confirming)
+        if ask:
+            ctx = build_context(label, conf, self.sense or {"ok": False}, size)
+            decision = validate("ASK_CONFIRM", ctx)
+            result = self.executor.execute(decision, moving=False, now=now)
+            self.confirm.ask(label, now)
+            return self._record(label, conf, ctx, intent, decision, result.ok, result.simulated,
+                                (self.clock() - t0) * 1000.0, result=result)
+        self.confirm.clear()
+        return self.handle_intent(intent, now, conf, label, size)
+
+    def _record(self, label, conf, ctx, requested, decision, bridge_ok, simulated, latency_ms,
+                explain: str = "", result: ExecResult | None = None) -> DecisionRecord:
         record = DecisionRecord(
             timestamp=datetime.now().isoformat(timespec="milliseconds"),
-            gesture=label, confidence=float(conf), context=ctx, requested_intent=requested or "",
-            decision=decision, bridge_ok=bool(sense.get("ok")) and result.ok,
-            simulated=(bool(sense.get("simulated")) or bool(sense.get("virtual_sonar"))
-                       or result.simulated),
-            latency_ms=latency_ms, explain=self.last_explain,
+            gesture=label, confidence=float(conf), context=ctx, requested_intent=requested,
+            decision=decision, bridge_ok=bool(bridge_ok), simulated=bool(simulated),
+            latency_ms=latency_ms, explain=explain, mode=self.mode, input_mode=self.input_mode,
+            bridge_error=self._bridge_error(),
         )
         self.last_record = record
-        if self.logger is not None:
-            self.logger.log(record)
-        print(f"[{record.timestamp}] {label} ({conf:.2f}) -> {decision.action}  "
-              f"[{decision.reason}]  {latency_ms:.0f} ms", flush=True)
+        entry = [record, False]
+        with self._log_lock:
+            self._log_queue.append(entry)
+        if result is None or not result.tickets:
+            self._complete(entry)
+        else:  # queued commands: the row is written when the worker has finished them
+            result.when_done(lambda res: self._finish_async(entry, res, latency_ms))
         return record
+
+    def _finish_async(self, entry, result: ExecResult, pilot_ms: float) -> None:
+        """Fill the record with the real outcome of the queued commands, then log it."""
+        record = entry[0]
+        record.bridge_ok = record.bridge_ok and result.ok
+        record.simulated = record.simulated or result.simulated
+        if result.errors:
+            record.bridge_error = result.errors[0]
+        elif result.cancelled:
+            record.bridge_error = "cancelled by stop"
+        motion = result.tickets[-1]  # the last command before the speech is the motion itself
+        if motion.finished_at is not None:
+            record.latency_ms = pilot_ms + (motion.finished_at - motion.enqueued_at) * 1000.0
+        self._complete(entry)
+
+    def _complete(self, entry) -> None:
+        """Mark a record final and write every final record at the head of the queue, in order."""
+        with self._log_lock:
+            entry[1] = True
+            while self._log_queue and self._log_queue[0][1]:
+                record = self._log_queue.pop(0)[0]
+                if self.logger is not None:
+                    self.logger.log(record)
+                print(f"[{record.timestamp}] {record.gesture} ({record.confidence:.2f}) -> "
+                      f"{record.decision.action}  [{record.decision.reason}]  "
+                      f"{record.latency_ms:.0f} ms", flush=True)
 
 
 class VirtualSonar:
@@ -500,7 +984,7 @@ class MockScenario:
                 f"| postura {self.posture}")
 
 
-def shutdown(client, music: MusicPlayer | None = None) -> None:
+def shutdown(client, music=None) -> None:
     """Always try to stop the robot, stop music, turn the eyes blue and close the bridge. Never raises.
 
     Stiffness is never released.
@@ -521,7 +1005,7 @@ def shutdown(client, music: MusicPlayer | None = None) -> None:
         print(f"WARNING: error closing the bridge: {exc}", file=sys.stderr)
 
 
-def run_session(client, loop, music: MusicPlayer | None = None):
+def run_session(client, loop, music=None):
     """Run ``loop()``; whatever happens, stop the robot, blue eyes and close the bridge."""
     try:
         return loop()
@@ -556,6 +1040,9 @@ def overlay_lines(pilot: Pilot, scenario: MockScenario | None = None,
     sense = pilot.sense or {}
     lines = [
         f"Gesto: {pilot.gesture} ({pilot.confidence:.2f})",
+        f"Modo: {pilot.mode} | Entrada: {pilot.input_mode}",
+        "Musica: " + (ascii_text(pilot.dj.current_track or "--") if pilot.dj is not None else "--")
+        + (" | baile" if pilot.dance.active else ""),
         f"Sonar I/D: {_cm(sense.get('sonar_left'))} / {_cm(sense.get('sonar_right'))} cm",
         f"Postura: {sense.get('posture', '--')} | Moviendo: "
         + ("SI" if sense.get("moving") else "NO"),
@@ -567,6 +1054,10 @@ def overlay_lines(pilot: Pilot, scenario: MockScenario | None = None,
     pending = pilot.confirm.pending_gesture
     if pending is not None:
         lines.append(f"Confirmar: repite {pending} ({pilot.confirm.remaining(now):.1f}s)")
+    if pilot.input_mode == vocab.INPUT_VOICE:
+        lines.append("Voz: " + ascii_text(pilot.voice_status or "pulsa 'v' para grabar/enviar"))
+    elif pilot.voice_status:
+        lines.append("Voz: " + ascii_text(pilot.voice_status))
     remaining = pilot.cooldown_remaining(now)
     lines.append(f"Espera: {remaining:.1f}s" if remaining > 0 else "Listo para ordenes")
     if scenario is not None:
@@ -591,7 +1082,7 @@ def draw_overlay(cv2, display, pilot: Pilot, scenario: MockScenario | None, now:
     for i, text in enumerate(explain_lines(pilot)):
         cv2.putText(display, text, (10, height - 50 + 16 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
                     (255, 255, 255), 1)
-    color = pilot.last_record.decision.eye_color if pilot.last_record else "blue"
+    color = pilot.last_record.decision.eye_color if pilot.last_record else pilot.eye_color
     cv2.circle(display, (width - 40, 40), 22, EYE_BGR.get(color, EYE_BGR["blue"]), -1)
     cv2.putText(display, "Ojos", (width - 62, 82), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                 (255, 255, 255), 1)
@@ -599,6 +1090,14 @@ def draw_overlay(cv2, display, pilot: Pilot, scenario: MockScenario | None, now:
     cv2.rectangle(display, (10, height - 12), (210, height - 4), (80, 80, 80), 1)
     cv2.rectangle(display, (10, height - 12), (10 + int(200 * fraction), height - 4),
                   (0, 165, 255), -1)
+
+
+def configure_capture(cv2, cap) -> None:
+    """Ask the driver for a 1-frame buffer so the preview shows the newest frame (best effort)."""
+    try:
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    except Exception:
+        pass
 
 
 def camera_loop(args, pilot: Pilot, scenario: MockScenario | None) -> int:
@@ -611,15 +1110,18 @@ def camera_loop(args, pilot: Pilot, scenario: MockScenario | None) -> int:
     if not cap.isOpened():
         print(f"ERROR: no se puede abrir la camara {args.camera}", file=sys.stderr)
         return 1
+    configure_capture(cv2, cap)
     mp_hands = mp.solutions.hands
     mp_draw = mp.solutions.drawing_utils
     window = "NAO gestos de mano"
     hint = "Ctrl+C para salir" if args.no_video else "'q' sale"
     if scenario is not None and not args.no_video:
         hint += f", teclas {'/'.join(scenario.KEYS)} simulan el entorno"
+    if not args.no_video:
+        hint += ", 'v' graba/envia la voz (entrada VOZ)"
     print(f"Listo. {hint}.", flush=True)
     try:
-        with mp_hands.Hands(max_num_hands=1, model_complexity=1, min_detection_confidence=0.5,
+        with mp_hands.Hands(max_num_hands=2, model_complexity=1, min_detection_confidence=0.5,
                             min_tracking_confidence=0.5) as hands:
             while True:
                 ok, frame = cap.read()
@@ -627,14 +1129,16 @@ def camera_loop(args, pilot: Pilot, scenario: MockScenario | None) -> int:
                     print("ERROR: no se pudo leer de la camara", file=sys.stderr)
                     return 1
                 result = hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                landmarks = handedness = None
-                if result.multi_hand_landmarks:
-                    hand = result.multi_hand_landmarks[0]
-                    landmarks = np.array([[p.x, p.y, p.z] for p in hand.landmark], dtype=float)
-                    handedness = result.multi_handedness[0].classification[0].label
+                hands_found = []  # up to two (landmarks, handedness)
+                for i, hand in enumerate(result.multi_hand_landmarks or []):
+                    points = np.array([[p.x, p.y, p.z] for p in hand.landmark], dtype=float)
+                    side = result.multi_handedness[i].classification[0].label
+                    hands_found.append((points, side))
                     if not args.no_video:
                         mp_draw.draw_landmarks(frame, hand, mp_hands.HAND_CONNECTIONS)
-                pilot.step(landmarks, handedness)
+                landmarks, handedness = hands_found[0] if hands_found else (None, None)
+                pilot.step(landmarks, handedness, second=hands_found[1] if len(hands_found) > 1
+                           else None)
                 if args.no_video:
                     continue
                 display = cv2.flip(frame, 1)  # mirrored preview (model input stays raw)
@@ -643,6 +1147,9 @@ def camera_loop(args, pilot: Pilot, scenario: MockScenario | None) -> int:
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):
                     return 0
+                if key == ord("v"):
+                    pilot.toggle_mic()
+                    continue
                 if scenario is not None and key != 255 and scenario.handle_key(chr(key)):
                     print(scenario.describe(), flush=True)
     finally:
@@ -652,11 +1159,25 @@ def camera_loop(args, pilot: Pilot, scenario: MockScenario | None) -> int:
 
 
 # ------------------------------------------------------------------------ CLI
-def build_parser() -> argparse.ArgumentParser:
+def configured_endpoint(config: Config, environ: dict) -> tuple:
+    """(ip, port) from NAO_IP / NAO_PORT only when they are really set (env or ``.env``).
+
+    The Config defaults (127.0.0.1) must never override a robot profile's own IP.
+    """
+    return (config.nao_ip if "NAO_IP" in environ else None,
+            config.nao_port if "NAO_PORT" in environ else None)
+
+
+def build_parser(config: Config | None = None) -> argparse.ArgumentParser:
+    config = config or Config()
     p = argparse.ArgumentParser(
         prog="python -m brain.main",
-        description="NAO controlled by hand gestures: webcam -> gesture -> context decision "
-                    "(sonars, posture, motion) -> robot.",
+        description="NAO controlled by hand gestures or voice: webcam -> gesture -> context "
+                    "decision (sonars, posture, motion) -> robot. Modes: MOVEMENT (default) and "
+                    "MUSIC; input: GESTURES (default) or VOICE. Two thumbs up held ~1 s toggle the "
+                    "mode, VICTORY toggles the input, OPEN_PALM is always an emergency stop; in "
+                    "VOICE input press 'v' in the preview to start/stop recording. "
+                    "NAO_IP/NAO_PORT/MUSIC_DIR/CHAMPIONS_SONG/GROQ_API_KEY come from .env.",
     )
     p.add_argument("--robot", choices=("zyra", "nyx", "sim"), default=None,
                    help="robot profile for the bridge (required unless --mock)")
@@ -677,6 +1198,18 @@ def build_parser() -> argparse.ArgumentParser:
                    help="ONLY for Choregraphe's virtual robot (no real sonars): replace its 0.0 m "
                         "sonar readings with simulated ones; keys 1/2/3/l/r place obstacles. "
                         "Refused with --robot zyra and with --mock")
+    p.add_argument("--music-dir", default=config.music_dir,
+                   help="folder with the songs for MUSIC mode (default: MUSIC_DIR from .env, "
+                        "else %(default)s)")
+    p.add_argument("--champions-song", default=config.champions_song or None,
+                   help="audio file played by the celebrate gesture/intent (default: "
+                        "CHAMPIONS_SONG from .env)")
+    p.add_argument("--confirm-ambiguous", action="store_true",
+                   help="ask for a repeat before acting on LOVE_YOU or VICTORY (often confused "
+                        "with each other; default off)")
+    p.add_argument("--no-voice", action="store_true",
+                   help="do not build the push-to-talk voice listener (GROQ_API_KEY; without a "
+                        "key only the keyword fallback exists)")
     p.add_argument("--log", default=None, help="decision CSV path (default runs/<timestamp>.csv)")
     p.add_argument("--no-video", action="store_true", help="do not open the preview window")
     return p
@@ -693,9 +1226,29 @@ def resolved_robot_ip(args) -> str:
     return args.ip or PROFILE_IPS.get(args.robot or "", "")
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
+def build_voice(pilot: Pilot, config: Config):
+    """Push-to-talk listener posting intents on the pilot's queue; None if it cannot be built."""
+    try:
+        from .voice.groq_client import GroqClient
+        from .voice.listener import VoiceListener
+        groq = GroqClient(config.groq_api_key) if config.has_groq else None
+        if groq is None:
+            print("AVISO: sin GROQ_API_KEY la voz no puede transcribir (solo el respaldo por "
+                  "palabras clave sobre texto).", file=sys.stderr)
+        return VoiceListener(pilot.post_voice, client=groq)
+    except Exception as exc:
+        print(f"AVISO: voz no disponible: {exc}", file=sys.stderr)
+        return None
+
+
+def main(argv: list[str] | None = None, config: Config | None = None) -> int:
+    config = config or load_config()
+    parser = build_parser(config)
     args = parser.parse_args(argv)
+    environ = {**parse_env_file(DEFAULT_ENV_PATH), **os.environ}
+    cfg_ip, cfg_port = configured_endpoint(config, environ)
+    args.ip = args.ip or cfg_ip
+    args.port = args.port or cfg_port
     if args.robot is None and not args.mock:
         parser.error("--robot is required unless --mock is given")
     if args.virtual_sonar and args.mock:
@@ -716,9 +1269,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     from .gestures.predictor import GesturePredictor
+    from .music import DJPlayer
     from .nao_client import NaoBridgeError, NaoClient
 
     predictor = GesturePredictor(args.gesture_model, min_conf=PREDICTOR_MIN_CONF)
+    predictor2 = GesturePredictor(args.gesture_model, min_conf=PREDICTOR_MIN_CONF)
     decider = load_context_decider(args.context_model)
     logger = DecisionLogger(args.log or default_log_path())
     print(f"Registro de decisiones: {logger.path}")
@@ -729,24 +1284,31 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ROBOT REAL ({args.robot}): despeja el piso y deja a alguien junto al NAO.")
 
     try:
-        client = NaoClient(robot=args.robot or "sim", mock=args.mock, ip=args.ip, port=args.port)
+        raw_client = NaoClient(robot=args.robot or "sim", mock=args.mock, ip=args.ip, port=args.port)
     except NaoBridgeError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         logger.close()
         return 1
 
+    # Every robot call runs on one worker thread: the camera loop never waits for the bridge.
+    client = AsyncClient(raw_client, sense_interval=SENSE_INTERVAL)
     virtual = VirtualSonar() if args.virtual_sonar else None
+    dj = DJPlayer(args.music_dir, args.champions_song)
     pilot = Pilot(client, predictor, decider, cooldown=args.cooldown,
-                  confirm_window=args.confirm_window, logger=logger, sonar_override=virtual)
+                  confirm_window=args.confirm_window, logger=logger, sonar_override=virtual,
+                  dj=dj, predictor2=predictor2, confirm_ambiguous=args.confirm_ambiguous)
+    if not args.no_voice:
+        pilot.voice = build_voice(pilot, config)
     scenario = MockScenario(client) if args.mock else virtual
 
     def loop() -> int:
-        ping = client.ping()
+        ping = raw_client.ping()  # startup check, before the first frame
         print(f"Puente listo (mock={ping.get('mock')}).")
+        pilot.announce_state()
         return camera_loop(args, pilot, scenario)
 
     try:
-        return run_session(client, loop, pilot.music)
+        return run_session(client, loop, types.SimpleNamespace(stop=pilot.stop_media))
     except KeyboardInterrupt:
         print("Interrumpido.")
         return 0

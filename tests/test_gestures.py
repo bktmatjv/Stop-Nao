@@ -30,6 +30,7 @@ from brain.gestures.features import (  # noqa: E402
     extract_features,
     hand_size,
 )
+from brain.gestures.two_hands import TwoHandsHold  # noqa: E402
 from brain.gestures.models import AdaptiveCalibratedSVC  # noqa: E402
 from brain.gestures.predictor import GesturePredictor  # noqa: E402
 
@@ -54,7 +55,7 @@ def _mirror(lm):
 
 # ------------------------------------------------------------------ contract
 def test_labels_contract():
-    assert LABELS == ["THUMBS_UP", "OPEN_PALM", "POINT_LEFT", "POINT_RIGHT", "VICTORY", "FIST", "TWO_FINGERS", "NONE"]
+    assert LABELS == ["THUMBS_UP", "OPEN_PALM", "POINT_LEFT", "POINT_RIGHT", "VICTORY", "FIST", "TWO_FINGERS", "LOVE_YOU", "NONE"]
     assert NUM_LANDMARKS == 21
     assert CSV_COLUMNS[:3] == ["person", "label", "handedness"]
     assert CSV_COLUMNS[3:6] == ["x0", "y0", "z0"] and CSV_COLUMNS[-3:] == ["x20", "y20", "z20"]
@@ -409,3 +410,101 @@ def test_predictor_sustained_gesture_change_and_pointing_sides(trained):
     for f in _frames("POINT_LEFT", 10, seed=23, handedness="Left"):
         label, _ = pred.update(f, "Left")
     assert label == "POINT_LEFT"
+
+
+# ------------------------------------------------------------------ LOVE_YOU
+def test_love_you_features_differ_from_victory_and_ignore_handedness():
+    n = NAMES.index("n_fingers_extended")
+    love, vic = _feat(_hand("LOVE_YOU")), _feat(_hand("VICTORY"))
+    assert love[n] == 2 and love[NAMES.index("ext_pinky")] > vic[NAMES.index("ext_pinky")]
+    assert love[NAMES.index("ext_middle")] == pytest.approx(_feat(_hand("FIST"))[NAMES.index("ext_middle")], abs=0.2)
+    assert np.linalg.norm(love - vic) > 1.0
+    lm = _hand("LOVE_YOU")
+    np.testing.assert_allclose(_feat(lm, "Left"), _feat(lm, "Right"), atol=0)
+
+
+def test_capture_accepts_love_you():
+    assert build_parser().parse_args(["--person", "ana", "--label", "LOVE_YOU"]).label == "LOVE_YOU"
+    assert "LOVE_YOU" in INSTRUCTIONS and INSTRUCTIONS["LOVE_YOU"].isascii()
+
+
+def _train_args(tmp_path, data):
+    return train.build_parser().parse_args(
+        ["--data", str(data), "--out", str(tmp_path / "m" / "g.joblib"),
+         "--figures-dir", str(tmp_path / "f"), "--metrics-dir", str(tmp_path / "mt"),
+         "--quick", "--n-jobs", "1"])
+
+
+def test_metrics_report_love_you_victory_confusion(trained):
+    metrics = json.loads((trained["metrics"] / "gesture_metrics.json").read_text(encoding="utf-8"))
+    conf = metrics["love_you_victory_confusion"]
+    assert 0.0 <= conf["rate"] <= 1.0
+    assert set(conf) >= {"rate", "love_you_as_victory", "victory_as_love_you", "model", "figure"}
+    assert Path(conf["figure"]).exists()
+    assert "LOVE_YOU" in metrics["labels"]
+
+
+def test_train_warns_when_a_label_has_no_data(tmp_path):
+    data = tmp_path / "data"
+    make_synthetic.generate_dataset(data, n_persons=4, frames=30)
+    for f in data.glob("*_LOVE_YOU_*.csv"):
+        f.unlink()
+    with pytest.warns(UserWarning, match="LOVE_YOU"):
+        metrics = train.train(_train_args(tmp_path, data))
+    assert "LOVE_YOU" not in metrics["labels"]
+    assert metrics["love_you_victory_confusion"]["rate"] is None
+    assert metrics["missing_labels"] == ["LOVE_YOU"]
+
+
+# ------------------------------------------------------------------ two hands hold
+class _Clock:
+    def __init__(self):
+        self.t = 100.0
+
+    def __call__(self):
+        return self.t
+
+
+def test_two_hands_hold_fires_once_after_hold():
+    clk = _Clock()
+    h = TwoHandsHold(hold=1.0, cooldown=2.0, clock=clk)
+    both = ["THUMBS_UP", "THUMBS_UP"]
+    assert h.update(both) is False
+    clk.t += 0.99
+    assert h.update(both) is False
+    clk.t += 0.02
+    assert h.update(both) is True
+    clk.t += 0.5  # cooldown ignores input
+    assert h.update(both) is False
+    clk.t += 1.4  # 1.9 s since firing: still cooling down
+    assert h.update(both) is False
+    clk.t += 0.2  # past cooldown: timer restarts
+    assert h.update(both) is False
+    clk.t += 1.05
+    assert h.update(both) is True
+
+
+@pytest.mark.parametrize("bad", [["THUMBS_UP"], [], ["THUMBS_UP", "FIST"], ["THUMBS_UP", "NONE"]])
+def test_two_hands_hold_resets_when_condition_breaks(bad):
+    clk = _Clock()
+    h = TwoHandsHold(hold=1.0, clock=clk)
+    both = ["THUMBS_UP", "THUMBS_UP"]
+    h.update(both)
+    clk.t += 0.9
+    assert h.update(bad) is False
+    clk.t += 0.2
+    assert h.update(both) is False  # timer restarted here
+    clk.t += 0.9
+    assert h.update(both) is False
+    clk.t += 0.2
+    assert h.update(both) is True
+
+
+def test_two_hands_hold_options_and_explicit_now():
+    h = TwoHandsHold(label="FIST", hold=0.5, min_hands=3, cooldown=0.0)
+    assert h.update(["FIST", "FIST"], now=0.0) is False
+    assert h.update(["FIST"] * 3, now=1.0) is False
+    assert h.update(["FIST"] * 3, now=1.5) is True
+    assert h.update(["FIST"] * 3, now=1.6) is False  # cooldown 0: restarts the timer
+    assert h.update(["FIST"] * 3, now=2.1) is True
+    assert h.update(["FIST", "FIST", "FIST", "FIST"], now=2.2) is False

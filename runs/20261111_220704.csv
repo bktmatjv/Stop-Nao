@@ -1,0 +1,6 @@
+timestamp,gesture,confidence,sonar_left,sonar_right,hand_size,moving,standing,requested_intent,action,params,reason,eye_color,overridden,bridge_ok,simulated,latency_ms,mode,input,bridge_error
+2026-11-11T22:07:25.655,THUMBS_UP,0.965,1.500,1.500,0.183,0,1,ADVANCE,ADVANCE,"{""x"": 0.35}","Avanzo, el camino está libre.",green,0,1,1,209.5,MOVEMENT,GESTURES,
+2026-11-11T22:07:38.496,LOVE_YOU,0.959,1.500,1.500,0.177,0,1,CELEBRATE,CELEBRATE,{},¡Somos los campeones!,blue,0,1,0,38.1,MOVEMENT,GESTURES,
+2026-11-11T22:07:44.723,VICTORY,0.714,1.500,1.500,0.141,0,1,TOGGLE_INPUT,TOGGLE_INPUT,{},Te escucho por voz,blue,0,1,0,206.7,MOVEMENT,VOICE,
+2026-11-11T22:08:18.127,OPEN_PALM,0.951,1.500,1.500,0.186,0,1,STOP,STOP,{},Me detengo.,blue,0,1,0,227.4,MOVEMENT,VOICE,
+2026-11-11T22:08:35.911,OPEN_PALM,0.932,1.500,1.500,0.217,0,1,STOP,STOP,{},Me detengo.,blue,0,1,0,1.4,MOVEMENT,VOICE,

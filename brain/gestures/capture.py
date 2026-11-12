@@ -36,11 +36,14 @@ INSTRUCTIONS = {
     "VICTORY": "VICTORY     = dos dedos en V (indice y medio), el resto cerrado.",
     "FIST": "FIST        = puno cerrado.",
     "TWO_FINGERS": "TWO_FINGERS = indice y medio juntos y rectos, apuntando al frente (saludo).",
+    "LOVE_YOU": "LOVE_YOU    = pulgar, indice y menique extendidos; medio y anular doblados.",
     "NONE": "NONE        = mano relajada / movimientos naturales / sin gesto.",
 }
 NO_HAND_WARNING = "NO SE VE LA MANO"
 FAR_WARNING = "MANO MUY LEJOS -> acercate o acerca la mano"
 LOW_VALID_RATIO = 0.5
+
+# LOVE_YOU is easy to confuse with VICTORY: keep middle+ring clearly curled and pinky+thumb clearly out.
 
 # Two-finger VICTORY hint for the capture preview
 VICTORY_HINT = "VICTORY: exactamente 2 dedos en V hacia arriba"

@@ -40,8 +40,10 @@ class NaoClient:
     """
 
     def __init__(self, robot=None, mock=False, ip=None, port=None, timeout=30.0,
-                 python27=r"C:\Python27\python.exe"):
+                 python27=r"C:\Python27\python.exe", raise_on_error=False):
         self.timeout = timeout
+        self.raise_on_error = raise_on_error
+        self.last_error = None  # error text of the latest ok:false reply, else None
         self._lock = threading.Lock()
         cmd = [python27, BRIDGE_SCRIPT]
         if mock:
@@ -107,7 +109,17 @@ class NaoClient:
             raise self._dead("died")
         return line.rstrip("\r\n")  # the Windows pipe may deliver CRLF
 
-    MAX_NOISE_LINES = 50  # non-JSON lines tolerated before one reply
+    def _track_error(self, cmd, reply):
+        if not isinstance(reply, dict) or reply.get("ok"):
+            self.last_error = None
+            return reply
+        text = str(reply.get("error") or "unspecified bridge error")
+        self.last_error = "%s: %s" % (cmd, text)
+        if self.raise_on_error:
+            raise NaoBridgeError(self.last_error)
+        return reply
+
+    MAX_NOISE_LINES = 50 # non-JSON lines tolerated before one reply
 
     def _call(self, **request):
         with self._lock:  # one request/response pair at a time
@@ -119,9 +131,10 @@ class NaoClient:
                     self._stderr_tail.append("[stdout noise] " + line)
                     continue
                 try:
-                    return json.loads(line)
+                    reply = json.loads(line)
                 except json.JSONDecodeError as exc:
                     raise NaoBridgeError("bridge returned invalid JSON: %s (line %r)" % (exc, line[:120]))
+                return self._track_error(request.get("cmd"), reply)
             raise self._dead("sent only non-JSON output")
 
     # -- public API -------------------------------------------------------
@@ -140,16 +153,25 @@ class NaoClient:
         return self._call(cmd="stop")
 
     def wave(self):
-        """Right-arm wave (blocks up to ~4 s on the real robot)."""
+        """Right-arm wave (~4 s); returns at once, ``sense()["animating"]`` tells when done."""
         return self._call(cmd="wave")
 
-    def dance(self):
-        """Celebratory dance with arms and head (blocks up to ~5.6 s on the robot)."""
-        return self._call(cmd="dance")
+    def dance(self, style="default"):
+        """Dance with arms and head, non-blocking. style: default, loop_a..loop_d
+        (~4 s each, chainable) or champions (~8 s celebration)."""
+        return self._call(cmd="dance", style=style)
 
     def greet(self):
-        """Quick salute greeting: right-arm raise + tip (blocks up to ~2 s)."""
+        """Quick salute greeting: right-arm raise + tip (~2 s, non-blocking)."""
         return self._call(cmd="greet")
+
+    def blink(self):
+        """Quick eye flash, then back to the current colour."""
+        return self._call(cmd="blink")
+
+    def ears(self, on):
+        """Switch the ear LEDs on or off."""
+        return self._call(cmd="ear_leds", on=on)
 
     def posture(self, name):
         """Go to "Sit" or "StandInit" (anything else is refused)."""
@@ -159,7 +181,7 @@ class NaoClient:
         return self._call(cmd="say", text=text)
 
     def eyes(self, color):
-        """Face LEDs: green, yellow, red, blue or white."""
+        """Face LEDs: green, yellow, red, blue, purple, white, ..."""
         return self._call(cmd="eyes", color=color)
 
     def set_mock(self, **kwargs):

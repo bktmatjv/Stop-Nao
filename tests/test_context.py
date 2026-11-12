@@ -55,7 +55,7 @@ def test_contract_constants():
 def test_intent_mapping_basic():
     assert intent_for("THUMBS_UP", True) == "ADVANCE"
     assert intent_for("OPEN_PALM", True) == "STOP"
-    assert intent_for("VICTORY", True) == "WAVE"
+    assert intent_for("VICTORY", True) is None  # VICTORY toggles the input now; WAVE is voice only
     assert intent_for("NONE", True) is None
     assert GESTURE_TO_INTENT["NONE"] is None
     assert GESTURE_TO_INTENT["FIST"] == "TOGGLE_POSTURE"
