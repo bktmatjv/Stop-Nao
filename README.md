@@ -11,8 +11,9 @@ Proyecto del curso Inteligencia Artificial (1ASI0404).
 ## Inicio rápido
 
 1. Crear el entorno de Python 3.11 e instalar las dependencias (ver [Instalación](#instalación)).
-2. Ejecutar el sistema en simulación: `python -m brain.main --mock` (ver [Ejecución del sistema](#ejecución-del-sistema)).
-3. Ejecutar las pruebas: `python -m pytest -q`.
+2. Copiar `.env.example` a `.env` y completar las variables (ver [Configuración `.env`](#configuración-env)).
+3. Ejecutar el sistema en simulación: `python -m brain.main --mock` (ver [Ejecución del sistema](#ejecución-del-sistema)).
+4. Ejecutar las pruebas: `python -m pytest -q`.
 
 ---
 
@@ -45,17 +46,47 @@ Cliente NAO  →  puente NAOqi (Python 2.7, proceso persistente)  →  robot NAO
 
 ---
 
-## Gestos, movimientos y comprobaciones
+## Modos y entrada
+
+El sistema tiene dos ejes independientes:
+
+- **Modo:** `MOVIMIENTO` (por defecto) o `MÚSICA`. Cambia el significado de los gestos.
+- **Entrada:** `GESTOS` (por defecto) o `VOZ`. En voz, el micrófono reemplaza a los gestos (salvo los dos gestos de control, ver abajo).
+
+Controles que funcionan siempre, en cualquier modo y entrada:
+
+- `VICTORY` (dos dedos en V) alterna la entrada entre GESTOS y VOZ.
+- `OPEN_PALM` (palma abierta) es parada de emergencia: detiene movimiento, baile, habla y música de inmediato.
+- Dos pulgares arriba, sostenidos unos 1 s, alternan el modo entre MOVIMIENTO y MÚSICA.
+
+## Gestos en modo MOVIMIENTO
 
 | Gesto | Movimiento del robot | Qué comprueba antes |
 |-------|----------------------|---------------------|
 | `THUMBS_UP` (pulgar arriba) | Avanzar 35 cm | Que no haya obstáculo al frente. Si hay uno cerca, avanza solo la distancia segura. |
-| `OPEN_PALM` (palma abierta) | Detener movimiento y música | Nada: siempre se permite. |
+| `OPEN_PALM` (palma abierta) | Detener movimiento | Nada: siempre se permite. |
 | `POINT_LEFT` (señalar a la izquierda) | Girar hacia ese lado | Que el sonar de ese lado esté libre. |
 | `POINT_RIGHT` (señalar a la derecha) | Girar hacia ese lado | Que el sonar de ese lado esté libre. |
-| `VICTORY` (dos dedos en V) | Baile festivo y canción aleatoria de `songs/` | Que esté de pie y quieto, y que la persona no esté demasiado cerca. |
 | `FIST` (puño cerrado) | Sentarse, o pararse si ya está sentado | Que no se esté moviendo. |
+| `LOVE_YOU` (pulgar, índice y meñique extendidos) | Celebrar: "We Are the Champions" (`CHAMPIONS_SONG`) con baile especial | Nada: se permite en ambos modos. |
+| `VICTORY` (dos dedos en V) | Alterna GESTOS / VOZ | Siempre activo. |
 | `NONE` (ninguno) | Ninguno | — |
+
+## Gestos en modo MÚSICA
+
+| Gesto | Acción |
+|-------|--------|
+| `THUMBS_UP` | Reproducir o reanudar, con baile mientras suena |
+| `OPEN_PALM` | Pausar música y baile (siempre activo) |
+| `POINT_RIGHT` | Canción siguiente |
+| `POINT_LEFT` | Canción anterior |
+| `FIST` | Detener música |
+| `LOVE_YOU` | Celebrar, igual que en modo MOVIMIENTO |
+| `VICTORY` | Alterna GESTOS / VOZ |
+
+**Voz.** `wave` (saludar) ya no está asociado a ningún gesto: se pide por voz con la frase "salúdame". En modo VOZ, la tecla `v` de la vista previa inicia y detiene la grabación (ver [Teclas](#ejecución-del-sistema)); la transcripción se convierte en una intención de la lista cerrada `vocab.VOICE_INTENTS`. Si el servicio de Groq falla, se usa un respaldo por palabras clave.
+
+**Riesgo de confusión.** `LOVE_YOU` y `VICTORY` pueden confundirse entre sí. Con `--confirm-ambiguous` el robot pide repetir antes de actuar con cualquiera de los dos.
 
 **Señalar.** La persona mira al robot, así que el robot gira *hacia donde señala la persona*. Su izquierda es la derecha del robot: `POINT_LEFT` hace girar al robot a su derecha. Esto lo controla la constante `POINT_TURNS_TOWARD_POINTED_SIDE = True`.
 
@@ -74,10 +105,12 @@ Cliente NAO  →  puente NAOqi (Python 2.7, proceso persistente)  →  robot NAO
 | Verde | Avanzar o orden aceptada |
 | Amarillo | Dudoso o limitado (avance corto, confirmación) |
 | Rojo | Rechazado por seguridad (obstáculo o persona muy cerca) |
-| Azul | En espera, escuchando |
-| Magenta | Modo VICTORY (baile y música) |
+| Azul | Modo MOVIMIENTO (en espera) |
+| Morado | Modo MÚSICA |
 | Cian | Giro a la izquierda o a la derecha |
 | Blanco | Cambio de postura (sentarse o ponerse de pie) |
+
+Los LED de las orejas se encienden cuando la entrada es VOZ.
 
 ---
 
@@ -96,6 +129,27 @@ pip install -r requirements.txt
 #    El programa principal inicia el puente automáticamente.
 ```
 
+`sounddevice` (en `requirements.txt`) es opcional y solo se usa para la entrada por voz. Sin él, el sistema funciona con gestos.
+
+---
+
+## Configuración `.env`
+
+```powershell
+copy .env.example .env
+```
+
+Variables que lee `brain/config.py` (el archivo `.env` no se versiona):
+
+| Variable | Descripción |
+|----------|-------------|
+| `NAO_IP`, `NAO_PORT` | Dirección y puerto del robot o del robot virtual |
+| `GROQ_API_KEY` | Clave de Groq para la voz (Whisper y clasificación de intenciones). Sin clave, solo funciona el respaldo por palabras clave |
+| `MUSIC_DIR` | Carpeta con las canciones del modo MÚSICA (por defecto `songs`) |
+| `CHAMPIONS_SONG` | Archivo de audio del gesto `LOVE_YOU` (celebrar) |
+
+Las variables de entorno del sistema tienen prioridad sobre el `.env`. Las opciones `--music-dir`, `--champions-song` y `--ip`/`--port` tienen prioridad sobre ambos.
+
 ---
 
 ## Estructura del proyecto
@@ -105,7 +159,10 @@ pip install -r requirements.txt
 | `brain/gestures/` | Captura con MediaPipe, características, entrenamiento y predicción del gesto |
 | `brain/context/` | Intenciones, características de contexto, capa de seguridad, modelo de decisión y recolección de escenarios |
 | `brain/main.py` | Punto de entrada: webcam, decisiones, ejecución y registro |
-| `brain/music.py` | Reproducción de canciones para el gesto `VICTORY` |
+| `brain/vocab.py` | Vocabulario compartido: modos, entradas, intenciones y mapa gesto → intención |
+| `brain/config.py` | Lectura de `.env` y variables de entorno |
+| `brain/music.py` | Reproductor del modo MÚSICA (lista desde `MUSIC_DIR`, baile mientras suena) |
+| `brain/voice/` | Entrada por voz: grabación (`listener.py`), cliente de Groq y respaldo por palabras clave |
 | `brain/nao_client.py` | Cliente que envía comandos al puente |
 | `bridge/` | Puente Python 2.7 con NAOqi (JSON por socket) |
 | `data/gestures/` | Muestras de gestos grabadas |
@@ -125,6 +182,12 @@ Grabar muestras de un gesto (una persona, una etiqueta, 15 segundos):
 
 ```powershell
 python -m brain.gestures.capture --person <identificador> --label <ETIQUETA> --seconds 15
+```
+
+Grabar `LOVE_YOU` (la clase nueva; el modelo anterior no la incluye):
+
+```powershell
+.venv311\Scripts\python.exe -m brain.gestures.capture --person <identificador> --label LOVE_YOU --seconds 15 --camera 0
 ```
 
 Entrenar el modelo de gestos:
@@ -181,12 +244,16 @@ El sistema necesita `models/gesture_model.joblib`. Si no existe, termina con có
 | `--log` | `runs/<fecha>.csv` | CSV con una fila por decisión |
 | `--no-video` | | Sin ventana de vista previa (salir con Ctrl+C) |
 | `--virtual-sonar` | | Solo con Choregraphe en `127.0.0.1`: simula los sonares (ver abajo) |
+| `--music-dir` | `MUSIC_DIR` de `.env`, o `songs` | Carpeta con las canciones del modo MÚSICA |
+| `--champions-song` | `CHAMPIONS_SONG` de `.env` | Audio que suena con el gesto `LOVE_YOU` |
+| `--confirm-ambiguous` | desactivado | Pide repetir antes de actuar con `LOVE_YOU` o `VICTORY` (suelen confundirse) |
+| `--no-voice` | desactivado | No crea el escucha de voz (sin clave de Groq, solo queda el respaldo por palabras clave) |
 
 **Qué ocurre.** Cuando aparece un gesto estable nuevo y pasó el tiempo de espera, el robot lee sus sensores, el modelo de contexto y la capa de seguridad deciden, y el robot se mueve, cambia el color de sus ojos y dice el motivo. Un gesto sostenido se ejecuta una sola vez. `NONE` nunca actúa. Si la confianza es baja, el robot pide repetir el gesto: si se repite con confianza de al menos 0.6 dentro de `--confirm-window`, se ejecuta aunque no haya pasado la espera entre órdenes. Si no, la petición caduca y los ojos vuelven a azul.
 
 **Vista previa.** Imagen de la cámara en espejo con los puntos de la mano, gesto y confianza, sonares en cm, postura, movimiento, última decisión con su motivo, color de los ojos, barra de espera, aviso de confirmación pendiente y, con un árbol de decisión como modelo de contexto, las primeras líneas de su explicación.
 
-**Teclas.** `q` cierra el programa (Ctrl+C también). Solo con `--mock`, estas teclas simulan el entorno:
+**Teclas.** `q` cierra el programa (Ctrl+C también). `v` inicia y detiene la grabación de voz (entrada VOZ). Solo con `--mock`, estas teclas simulan el entorno:
 
 | Tecla | Escenario simulado |
 |-------|--------------------|
@@ -211,6 +278,7 @@ El sistema necesita `models/gesture_model.joblib`. Si no existe, termina con có
 - Las lecturas de sonar inválidas (cero, negativas o NaN) se tratan como inseguras.
 - Los comandos de movimiento están limitados: `0 <= x <= 0.30` m y `|theta| <= 1.6` rad. No se mueve si el robot no está de pie.
 - `OPEN_PALM` (detener) siempre está permitido.
+- `VICTORY` (cambiar de entrada) y `OPEN_PALM` funcionan aunque la entrada activa sea VOZ. En entrada VOZ, los demás gestos se ignoran, y el micrófono se ignora mientras la entrada son GESTOS.
 - Las pruebas automatizadas usan solo `--mock`. Las pruebas con el robot real las hace el equipo, con supervisión.
 
 ---
@@ -229,6 +297,7 @@ El sistema necesita `models/gesture_model.joblib`. Si no existe, termina con có
 
 ## Notas del repositorio
 
-- **Música.** Los archivos de audio no se versionan. Coloque sus canciones en `songs/` (`.wav` o `.mp3`).
+- **Música.** Los archivos de audio no se versionan. Coloque sus canciones en la carpeta indicada por `MUSIC_DIR` (por defecto `songs/`, `.wav` o `.mp3`) y la canción de celebración en `CHAMPIONS_SONG`.
+- **Claves.** `.env` está en `.gitignore`: la clave `GROQ_API_KEY` no debe subirse al repositorio.
 - **Registro interno.** La carpeta `odd/` (planes y registro de tareas del flujo de trabajo) no se versiona.
 - **Créditos.** El patrón de subproceso Python 3 → Python 2.7 está tomado de `naoooo/py27-py3.py`, material del curso.

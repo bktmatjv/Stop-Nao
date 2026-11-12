@@ -34,19 +34,45 @@ Idea clave: el modelo propone, la **regla de seguridad decide**.
 
 ## 3. Gestos, movimientos y comprobaciones
 
+El sistema tiene dos ejes independientes: **modo** (MOVIMIENTO o MÚSICA) y **entrada** (GESTOS o VOZ). El mismo gesto significa cosas distintas según el modo.
+
+### 3.1 Gestos en modo MOVIMIENTO
+
 | Gesto | Cómo se hace | Movimiento del robot | Qué comprueba el robot |
 |-------|--------------|----------------------|------------------------|
 | `THUMBS_UP` (pulgar arriba) | Puño con el pulgar hacia arriba | Avanzar 35 cm | Que no haya obstáculo al frente (si hay uno cerca, avanza solo la distancia segura) |
-| `OPEN_PALM` (palma abierta) | Mano abierta, dedos juntos, palma a la cámara | Detener movimiento y música | Nada: siempre se permite |
+| `OPEN_PALM` (palma abierta) | Mano abierta, dedos juntos, palma a la cámara | Detener movimiento, baile, habla y música | Nada: siempre se permite |
 | `POINT_LEFT` (señalar a tu izquierda) | Índice estirado apuntando a **tu** izquierda | Girar hacia ese lado (el robot gira a **su** derecha) | Que el sonar de ese lado esté libre |
 | `POINT_RIGHT` (señalar a tu derecha) | Índice estirado apuntando a **tu** derecha | Girar hacia ese lado (el robot gira a **su** izquierda) | Que el sonar de ese lado esté libre |
-| `VICTORY` (dos dedos en V) | Índice y medio en V | Baile festivo, saluda y reproduce una canción aleatoria | Que esté de pie y quieto, y que la persona no esté demasiado cerca |
 | `FIST` (puño) | Puño cerrado | Sentarse, o pararse si ya está sentado | Que no se esté moviendo |
+| `LOVE_YOU` (nueva) | Pulgar, índice y meñique extendidos | Celebrar: "We Are the Champions" y baile especial | Nada: funciona en ambos modos |
+| `VICTORY` (dos dedos en V) | Índice y medio en V | Cambia la entrada entre GESTOS y VOZ | Siempre activo, también con voz |
 | `NONE` (ninguno) | Mano relajada, movimientos naturales | Nada | No aplica |
+
+### 3.2 Gestos en modo MÚSICA
+
+| Gesto | Acción |
+|-------|--------|
+| `THUMBS_UP` | Reproducir o reanudar la música, con baile mientras suena |
+| `OPEN_PALM` | Pausar música y baile |
+| `POINT_RIGHT` | Canción siguiente |
+| `POINT_LEFT` | Canción anterior |
+| `FIST` | Detener la música |
+| `LOVE_YOU` | Celebrar (igual que en MOVIMIENTO) |
+| `VICTORY` | Cambia la entrada entre GESTOS y VOZ |
+
+### 3.3 Controles que cambian el modo o la entrada
+
+- **Dos pulgares arriba**, sostenidos unos 1 segundo: cambia el modo entre MOVIMIENTO y MÚSICA. Es un gesto con las dos manos.
+- **`VICTORY`**: cambia la entrada entre GESTOS y VOZ.
+- **`OPEN_PALM`**: parada de emergencia en cualquier modo y entrada.
+- **Voz**: en entrada VOZ, se pulsa la tecla `v` de la vista previa para empezar a grabar y otra vez para terminar. Los LED de las orejas indican que la entrada es voz. Ejemplo de frase: "salúdame" (el saludo ya no es un gesto).
 
 **Importante sobre señalar:** el robot gira **hacia donde señala la persona**. Como la persona mira al robot, su izquierda es la derecha del robot. Por eso `POINT_LEFT` hace girar al robot a su derecha. Esto está controlado por la constante `POINT_TURNS_TOWARD_POINTED_SIDE = True`.
 
 **Gesto poco claro:** si el sistema no está seguro (confianza menor a 0.6), el robot pide repetir el gesto y no se mueve.
+
+**Confusión LOVE_YOU / VICTORY:** estos dos gestos pueden confundirse. Si pasa, el robot puede celebrar cuando se quiso cambiar de entrada, o al revés. Con `--confirm-ambiguous` el robot pide repetir antes de actuar con cualquiera de los dos.
 
 ## 4. Colores de los ojos
 
@@ -55,10 +81,12 @@ Idea clave: el modelo propone, la **regla de seguridad decide**.
 | Verde | Avanzar o orden aceptada |
 | Amarillo | Dudoso o limitado (avance corto por precaución, confirmación) |
 | Rojo | Rechazado por seguridad (obstáculo detectado o persona muy cerca) |
-| Azul | En espera, escuchando |
-| Magenta | Modo VICTORY (baile y música) |
+| Azul | Modo MOVIMIENTO (en espera) |
+| Morado | Modo MÚSICA |
 | Cian | Giro a la izquierda o a la derecha |
 | Blanco | Cambio de postura (sentarse o ponerse de pie) |
+
+Los LED de las orejas se encienden cuando la entrada es VOZ.
 
 ## 5. Cómo ejecutar el sistema (`brain.main`)
 
@@ -77,7 +105,16 @@ python -m brain.main --robot zyra
 
 Necesita el modelo de gestos `models/gesture_model.joblib`. Si no existe, el programa termina con código 2 e indica cómo entrenarlo (`python -m brain.gestures.train`). Si falta `models/context_model.joblib`, avisa y usa solo las reglas por gesto y la capa de seguridad.
 
-**Teclas.** `q` cierra el programa (Ctrl+C también). Solo con `--mock`, estas teclas simulan el entorno:
+**Opciones nuevas.** Las canciones y la clave de voz se configuran en `.env` (ver la sección 6b). Las opciones de línea de comandos tienen prioridad:
+
+| Opción | Descripción |
+|--------|-------------|
+| `--music-dir <carpeta>` | Carpeta de canciones del modo MÚSICA (por defecto, `MUSIC_DIR` del `.env`, o `songs`) |
+| `--champions-song <archivo>` | Audio para el gesto `LOVE_YOU` (por defecto, `CHAMPIONS_SONG` del `.env`) |
+| `--confirm-ambiguous` | Pide repetir antes de actuar con `LOVE_YOU` o `VICTORY` |
+| `--no-voice` | No activa la entrada por voz |
+
+**Teclas.** `q` cierra el programa (Ctrl+C también). `v` inicia y detiene la grabación de voz (entrada VOZ). Solo con `--mock`, estas teclas simulan el entorno:
 
 | Tecla | Escenario simulado |
 |-------|--------------------|
@@ -115,7 +152,7 @@ Cada rol tiene pasos numerados que se siguen en orden. Los roles pueden intercam
 
 ### Rol 2: Dataset y modelo de gestos
 
-1. Grabar los 7 gestos con la mano que se usará en la demo: `THUMBS_UP`, `OPEN_PALM`, `POINT_LEFT`, `POINT_RIGHT`, `VICTORY`, `FIST` y `NONE`. Cada grabación dura unos 15 segundos.
+1. Grabar los 7 gestos con la mano que se usará en la demo: `THUMBS_UP`, `OPEN_PALM`, `POINT_LEFT`, `POINT_RIGHT`, `VICTORY`, `FIST` y `NONE`. Cada grabación dura unos 15 segundos. Además, grabar la clase nueva `LOVE_YOU` (ver la sección 6b).
 2. Hacer que **cada integrante del equipo** grabe los 7 gestos con su propio identificador:
    ```powershell
    python -m brain.gestures.capture --person <identificador> --label <ETIQUETA> --seconds 15
@@ -156,6 +193,32 @@ Cada rol tiene pasos numerados que se siguen en orden. Los roles pueden intercam
 2. Formato del informe: PDF, Times New Roman 12, interlineado 1.5, márgenes de 2.5 cm, entre 8 y 15 páginas con figuras.
 3. Grabar el video siguiendo `report/guion_video.md`. Duración objetivo: 4 minutos (rango de 3 a 5).
 4. Revisar que las cifras del informe y del video coincidan con los archivos de métricas finales.
+
+## 6b. Checklist del equipo: música y voz
+
+Tareas pendientes antes de la demo. Cada una la hace una persona del equipo; marcar cuando esté lista.
+
+- [ ] **Grabar `LOVE_YOU`** con Matías y con Vivianne, usando la mano de la demo (desde `.venv311`):
+  ```powershell
+  .venv311\Scripts\python.exe -m brain.gestures.capture --person <identificador> --label LOVE_YOU --seconds 15 --camera 0
+  ```
+  Las muestras van a `data/gestures`. El identificador no puede tener espacios ni guiones bajos.
+- [ ] **Reentrenar el modelo de gestos**, porque el modelo actual no conoce `LOVE_YOU`:
+  ```powershell
+  python -m brain.gestures.train --data data/gestures --out models/gesture_model.joblib
+  ```
+  Luego revisar la clave `love_you_victory_confusion` de `report/metrics/gesture_metrics.json`. Ese dato va al informe.
+- [ ] **Copiar las canciones**: "We Are the Champions" en el archivo de `CHAMPIONS_SONG`, y las canciones de DJ en la carpeta de `MUSIC_DIR` (`.wav` o `.mp3`). Las dos rutas se definen en `.env`. Los audios no se suben al repositorio.
+- [ ] **Crear la clave de Groq** y ponerla en `GROQ_API_KEY` del `.env`. El archivo `.env` no se sube al repositorio.
+- [ ] **Probar la red del laboratorio**: confirmar que no bloquea `api.groq.com`. Si bloquea, la voz funciona solo con el respaldo por palabras clave.
+
+Configuración inicial del `.env` (una vez por computador):
+
+```powershell
+copy .env.example .env
+```
+
+Completar `NAO_IP`, `NAO_PORT`, `GROQ_API_KEY`, `MUSIC_DIR` y `CHAMPIONS_SONG`.
 
 ## 7. Idea de demo: "misión"
 

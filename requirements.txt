@@ -7,3 +7,6 @@ matplotlib>=3.7
 seaborn>=0.13
 joblib>=1.3
 pytest>=8
+# Opcional: solo para la entrada por voz (micrófono). Sin esta librería el sistema funciona con gestos.
+sounddevice>=0.4
+soundfile>=0.12
