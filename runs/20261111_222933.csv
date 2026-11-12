@@ -1,0 +1,2 @@
+timestamp,gesture,confidence,sonar_left,sonar_right,hand_size,moving,standing,requested_intent,action,params,reason,eye_color,overridden,bridge_ok,simulated,latency_ms,mode,input,bridge_error
+2026-11-11T22:30:22.750,OPEN_PALM,0.946,1.500,1.500,0.182,0,1,STOP,STOP,{},Me detengo.,green,0,1,1,209.8,MOVEMENT,GESTURES,

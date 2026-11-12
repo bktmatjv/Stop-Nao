@@ -1,0 +1,30 @@
+timestamp,gesture,confidence,sonar_left,sonar_right,hand_size,moving,standing,requested_intent,action,params,reason,eye_color,overridden,bridge_ok,simulated,latency_ms,mode,input,bridge_error
+2026-11-11T22:31:10.188,OPEN_PALM,0.979,1.500,1.500,0.238,0,1,STOP,STOP,{},Me detengo.,green,0,1,1,400.3,MOVEMENT,GESTURES,
+2026-11-11T22:31:14.178,FIST,0.701,1.500,1.500,0.091,0,1,SIT,SIT,{},Me siento a descansar.,white,0,0,1,19110.2,MOVEMENT,GESTURES,"posture: NAO bridge died (exit code None). stderr tail:
+[bridge] connecting to 127.0.0.1:50726
+[I] 20968 qimessaging.session: Session listener created on tcp://0.0.0.0:0
+[I] 20968 qimessaging.transportserver: TransportServer will listen on: tcp://192.168.1.42:65339
+[I] 20968 qimessaging.transportserver: TransportServer will listen on: tcp://172.29.64.1:65339
+[I] 20968 qimessaging.transportserver: TransportServer will listen on: tcp://127.0.0.1:65339
+[bridge] ready (mock=False)"
+2026-11-11T22:31:17.986,OPEN_PALM,0.550,nan,nan,0.072,0,0,STOP,STOP,{},Me detengo.,green,0,0,0,15313.1,MOVEMENT,GESTURES,"stop: NAO bridge died (exit code None). stderr tail:
+[bridge] connecting to 127.0.0.1:50726
+[I] 20968 qimessaging.session: Session listener created on tcp://0.0.0.0:0
+[I] 20968 qimessaging.transportserver: TransportServer will listen on: tcp://192.168.1.42:65339
+[I] 20968 qimessaging.transportserver: TransportServer will listen on: tcp://172.29.64.1:65339
+[I] 20968 qimessaging.transportserver: TransportServer will listen on: tcp://127.0.0.1:65339
+[bridge] ready (mock=False)"
+2026-11-11T22:31:20.531,FIST,0.705,nan,nan,0.058,0,0,STAND,STAND,{},Me pongo de pie y estoy listo.,white,0,0,0,12766.2,MOVEMENT,GESTURES,"stop: NAO bridge died (exit code None). stderr tail:
+[bridge] connecting to 127.0.0.1:50726
+[I] 20968 qimessaging.session: Session listener created on tcp://0.0.0.0:0
+[I] 20968 qimessaging.transportserver: TransportServer will listen on: tcp://192.168.1.42:65339
+[I] 20968 qimessaging.transportserver: TransportServer will listen on: tcp://172.29.64.1:65339
+[I] 20968 qimessaging.transportserver: TransportServer will listen on: tcp://127.0.0.1:65339
+[bridge] ready (mock=False)"
+2026-11-11T22:31:32.821,FIST,0.606,nan,nan,0.144,0,0,STAND,STAND,{},Me pongo de pie y estoy listo.,white,0,0,0,469.1,MOVEMENT,GESTURES,"stop: NAO bridge died (exit code None). stderr tail:
+[bridge] connecting to 127.0.0.1:50726
+[I] 20968 qimessaging.session: Session listener created on tcp://0.0.0.0:0
+[I] 20968 qimessaging.transportserver: TransportServer will listen on: tcp://192.168.1.42:65339
+[I] 20968 qimessaging.transportserver: TransportServer will listen on: tcp://172.29.64.1:65339
+[I] 20968 qimessaging.transportserver: TransportServer will listen on: tcp://127.0.0.1:65339
+[bridge] ready (mock=False)"

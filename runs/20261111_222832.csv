@@ -1,0 +1,23 @@
+timestamp,gesture,confidence,sonar_left,sonar_right,hand_size,moving,standing,requested_intent,action,params,reason,eye_color,overridden,bridge_ok,simulated,latency_ms,mode,input,bridge_error
+2026-11-11T22:29:06.103,FIST,0.807,1.500,1.500,0.188,0,1,SIT,SIT,{},Me siento a descansar.,white,0,0,1,20181.9,MOVEMENT,GESTURES,"posture: NAO bridge died (exit code None). stderr tail:
+[bridge] connecting to 127.0.0.1:50726
+[I] 37992 qimessaging.session: Session listener created on tcp://0.0.0.0:0
+[I] 37992 qimessaging.transportserver: TransportServer will listen on: tcp://192.168.1.42:51807
+[I] 37992 qimessaging.transportserver: TransportServer will listen on: tcp://172.29.64.1:51807
+[I] 37992 qimessaging.transportserver: TransportServer will listen on: tcp://127.0.0.1:51807
+[bridge] ready (mock=False)"
+2026-11-11T22:29:08.422,FIST,0.768,nan,nan,0.178,0,0,STAND,STAND,{},Me pongo de pie y estoy listo.,white,0,0,0,17672.1,MOVEMENT,GESTURES,"stop: NAO bridge died (exit code None). stderr tail:
+[bridge] connecting to 127.0.0.1:50726
+[I] 37992 qimessaging.session: Session listener created on tcp://0.0.0.0:0
+[I] 37992 qimessaging.transportserver: TransportServer will listen on: tcp://192.168.1.42:51807
+[I] 37992 qimessaging.transportserver: TransportServer will listen on: tcp://172.29.64.1:51807
+[I] 37992 qimessaging.transportserver: TransportServer will listen on: tcp://127.0.0.1:51807
+[bridge] ready (mock=False)"
+2026-11-11T22:29:12.123,FIST,0.696,nan,nan,0.166,0,0,STAND,STAND,{},Me pongo de pie y estoy listo.,white,0,0,0,13969.2,MOVEMENT,GESTURES,"stop: NAO bridge died (exit code None). stderr tail:
+[bridge] connecting to 127.0.0.1:50726
+[I] 37992 qimessaging.session: Session listener created on tcp://0.0.0.0:0
+[I] 37992 qimessaging.transportserver: TransportServer will listen on: tcp://192.168.1.42:51807
+[I] 37992 qimessaging.transportserver: TransportServer will listen on: tcp://172.29.64.1:51807
+[I] 37992 qimessaging.transportserver: TransportServer will listen on: tcp://127.0.0.1:51807
+[bridge] ready (mock=False)"
+2026-11-11T22:29:15.051,LOVE_YOU,0.979,1.500,1.500,0.210,0,1,CELEBRATE,CELEBRATE,{},¡Somos los campeones!,blue,0,1,0,1.2,MOVEMENT,GESTURES,

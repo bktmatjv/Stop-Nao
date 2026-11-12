@@ -1,0 +1,23 @@
+timestamp,gesture,confidence,sonar_left,sonar_right,hand_size,moving,standing,requested_intent,action,params,reason,eye_color,overridden,bridge_ok,simulated,latency_ms,mode,input,bridge_error
+2026-11-11T22:39:18.981,OPEN_PALM,0.978,1.500,1.500,0.262,0,1,STOP,STOP,{},Me detengo.,green,0,1,1,203.1,MOVEMENT,GESTURES,
+2026-11-11T22:39:39.715,FIST,0.628,1.500,1.500,0.168,0,1,SIT,SIT,{},Me siento a descansar.,white,0,0,1,13422.1,MOVEMENT,GESTURES,posture: goToPosture(Sit) returned False
+2026-11-11T22:40:22.063,FIST,0.725,1.500,1.500,0.231,0,1,SIT,SIT,{},Me siento a descansar.,white,0,1,1,20032.1,MOVEMENT,GESTURES,
+2026-11-11T22:41:42.797,FIST,0.672,1.500,1.500,0.150,0,1,SIT,SIT,{},Me siento a descansar.,white,0,0,1,30219.1,MOVEMENT,GESTURES,"posture: NAO bridge did not answer within 30.0s (exit code None). stderr tail:
+[bridge] connecting to 127.0.0.1:50726
+[I] 4876 qimessaging.session: Session listener created on tcp://0.0.0.0:0
+[I] 4876 qimessaging.transportserver: TransportServer will listen on: tcp://192.168.1.42:61429
+[I] 4876 qimessaging.transportserver: TransportServer will listen on: tcp://172.29.64.1:61429
+[I] 4876 qimessaging.transportserver: TransportServer will listen on: tcp://127.0.0.1:61429
+[bridge] ready (mock=False)
+[bridge] error response: goToPosture(Sit) returned False"
+2026-11-11T22:41:43.464,OPEN_PALM,0.595,1.500,1.500,0.218,0,1,STOP,STOP,{},Me detengo.,green,0,1,1,33703.1,MOVEMENT,GESTURES,
+2026-11-11T22:41:46.712,FIST,0.695,nan,nan,0.156,0,0,STAND,STAND,{},Me pongo de pie y estoy listo.,white,0,0,0,30859.1,MOVEMENT,GESTURES,
+2026-11-11T22:41:50.094,LOVE_YOU,0.975,1.500,1.500,0.218,0,1,CELEBRATE,CELEBRATE,{},¡Somos los campeones!,blue,0,1,0,29.7,MOVEMENT,GESTURES,
+2026-11-11T22:41:54.057,OPEN_PALM,0.886,nan,nan,0.176,0,0,STOP,STOP,{},Me detengo.,green,0,0,0,32141.2,MOVEMENT,GESTURES,"eyes: NAO bridge died (exit code None). stderr tail:
+[bridge] connecting to 127.0.0.1:50726
+[I] 4876 qimessaging.session: Session listener created on tcp://0.0.0.0:0
+[I] 4876 qimessaging.transportserver: TransportServer will listen on: tcp://192.168.1.42:61429
+[I] 4876 qimessaging.transportserver: TransportServer will listen on: tcp://172.29.64.1:61429
+[I] 4876 qimessaging.transportserver: TransportServer will listen on: tcp://127.0.0.1:61429
+[bridge] ready (mock=False)
+[bridge] error response: goToPosture(Sit) returned False"
