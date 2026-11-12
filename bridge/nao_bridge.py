@@ -10,7 +10,8 @@ Protocol:
     {"cmd":"ping"}
         -> {"ok":true,"mock":bool}
     {"cmd":"sense"}
-        -> {"ok":true,"sonar_left":f,"sonar_right":f,"moving":bool,"posture":str}
+        -> {"ok":true,"sonar_left":f,"sonar_right":f,"moving":bool,"posture":str,
+            "animating":bool,"eyes":int(0xRRGGBB),"ears":bool}
            posture comes from ALRobotPosture.getPosture() ("Stand", "StandInit",
            "Sit", "Crouch", "Unknown", ...)
     {"cmd":"move","x":f,"theta":f}
@@ -18,14 +19,22 @@ Protocol:
            x is clamped to [0, 0.30] m and theta to [-1.6, 1.6] rad. Refused
            (ok:false) unless the posture is Stand, StandInit or StandZero.
     {"cmd":"stop"}
-        -> {"ok":true}                                  stopMove()
+        -> {"ok":true}   stops moveTo, animation/dance and speech; clears animating
     {"cmd":"wave"}
-        -> {"ok":true,"duration":f}   right-arm wave, arms only, blocking (<= 4 s).
+        -> {"ok":true,"duration":f}   right-arm wave (~3.8 s), arms only. NON-blocking:
+           returns at once, sense.animating is true until it ends.
            Refused while moving or when not standing. The arm is restored.
+    {"cmd":"dance","style"?:"default|loop_a|loop_b|loop_c|loop_d|champions"}
+        -> {"ok":true,"duration":f}   non-blocking, same checks as wave. loop_* ~4 s,
+           champions ~8 s (arms up, head, wave), default ~5.6 s. A new animation
+           replaces the running one.
+    {"cmd":"greet"}                -> {"ok":true,"duration":f}   non-blocking salute
+    {"cmd":"blink"}                -> {"ok":true}   quick eye flash, colour restored
+    {"cmd":"ear_leds","on":bool}   -> {"ok":true}
     {"cmd":"posture","name":"Sit"|"StandInit"}
         -> {"ok":true}                goToPosture(name, 0.6); refused while moving
-    {"cmd":"say","text":"..."}                 -> {"ok":true}   (utf-8, Spanish)
-    {"cmd":"eyes","color":"green|yellow|red|blue|white"}  -> {"ok":true}
+    {"cmd":"say","text":"..."}                 -> {"ok":true}   non-blocking (utf-8, Spanish)
+    {"cmd":"eyes","color":"green|yellow|red|blue|purple|white|..."}  -> {"ok":true}
     {"cmd":"set_mock","sonar_left"?,"sonar_right"?,"posture"?,"moving"?}
         -> {"ok":true}                (mock mode only)
     {"cmd":"quit"}                             -> {"ok":true}, then the process exits
@@ -56,6 +65,7 @@ import numbers
 import os
 import re
 import sys
+import threading
 import time
 
 SDK_DIR = r"C:\Python27\Lib\site-packages"
@@ -177,6 +187,62 @@ DANCE_STEPS = [
     (5.6, None),  # returns to starting pose
 ]
 
+
+
+def _pose(hy, hp, rsp, rsr, rey, rer, lsp, lsr, ley, ler):
+    return {
+        "HeadYaw": hy, "HeadPitch": hp,
+        "RShoulderPitch": rsp, "RShoulderRoll": rsr, "RElbowYaw": rey, "RElbowRoll": rer,
+        "LShoulderPitch": lsp, "LShoulderRoll": lsr, "LElbowYaw": ley, "LElbowRoll": ler,
+    }
+
+
+# Short (4 s) loops so music mode can chain them, plus a long celebration.
+# Keyframes are >= 1 s apart so every joint stays far below WAVE_MAX_VELOCITY.
+DANCE_LOOP_A = [  # alternate arms up/down
+    (1.0, _pose(-0.20, -0.10, 0.30, -0.50, 1.20, 1.05, 1.10, 0.30, -1.20, -0.70)),
+    (2.0, _pose(0.20, -0.10, 1.10, -0.30, 1.20, 0.70, 0.30, 0.50, -1.20, -1.05)),
+    (3.0, _pose(-0.20, -0.10, 0.30, -0.50, 1.20, 1.05, 1.10, 0.30, -1.20, -0.70)),
+    (4.0, None),
+]
+DANCE_LOOP_B = [  # both arms wide, head nods
+    (1.0, _pose(0.0, 0.20, 0.80, -1.00, 1.20, 0.50, 0.80, 1.00, -1.20, -0.50)),
+    (2.0, _pose(0.0, -0.25, 0.80, -0.40, 1.20, 1.20, 0.80, 0.40, -1.20, -1.20)),
+    (3.0, _pose(0.0, 0.20, 0.80, -1.00, 1.20, 0.50, 0.80, 1.00, -1.20, -0.50)),
+    (4.0, None),
+]
+DANCE_LOOP_C = [  # arms forward, head sweeps left-right
+    (1.0, _pose(0.50, -0.10, 0.60, -0.20, 1.20, 0.90, 0.60, 0.20, -1.20, -0.90)),
+    (2.0, _pose(-0.50, -0.10, 0.60, -0.20, 1.20, 0.90, 0.60, 0.20, -1.20, -0.90)),
+    (3.0, _pose(0.50, -0.10, 0.20, -0.20, 1.20, 1.30, 0.20, 0.20, -1.20, -1.30)),
+    (4.0, None),
+]
+DANCE_LOOP_D = [  # one arm up, one down, then swap, head tilting
+    (1.0, _pose(-0.30, 0.10, -0.30, -0.30, 1.20, 1.10, 1.30, 0.20, -1.20, -0.50)),
+    (2.0, _pose(0.30, -0.10, 1.30, -0.20, 1.20, 0.50, -0.30, 0.30, -1.20, -1.10)),
+    (3.0, _pose(0.0, 0.0, 0.60, -0.50, 1.20, 0.80, 0.60, 0.50, -1.20, -0.80)),
+    (4.0, None),
+]
+# "We Are the Champions": both arms up, head up, a right-arm wave, arms up, ~8 s.
+DANCE_CHAMPIONS = [
+    (1.5, _pose(0.0, -0.20, -1.00, -0.30, 1.20, 0.60, -1.00, 0.30, -1.20, -0.60)),
+    (2.5, _pose(-0.40, -0.35, -1.00, -0.30, 1.20, 0.60, -1.00, 0.30, -1.20, -0.60)),
+    (3.5, _pose(0.40, -0.35, -1.00, -0.30, 1.20, 0.60, -1.00, 0.30, -1.20, -0.60)),
+    (4.5, _pose(0.0, -0.20, -0.50, -0.40, 1.20, 0.60, -1.00, 0.30, -1.20, -0.60)),
+    (5.3, _pose(0.0, -0.20, -0.50, -0.40, 1.20, 1.30, -1.00, 0.30, -1.20, -0.60)),
+    (6.1, _pose(0.0, -0.20, -0.50, -0.40, 1.20, 0.50, -1.00, 0.30, -1.20, -0.60)),
+    (7.0, _pose(0.0, -0.35, -1.00, -0.30, 1.20, 0.60, -1.00, 0.30, -1.20, -0.60)),
+    (8.0, None),
+]
+DANCE_STYLES = {
+    "default": DANCE_STEPS,
+    "loop_a": DANCE_LOOP_A,
+    "loop_b": DANCE_LOOP_B,
+    "loop_c": DANCE_LOOP_C,
+    "loop_d": DANCE_LOOP_D,
+    "champions": DANCE_CHAMPIONS,
+}
+
 # Greeting choreography: right-arm salute tip (~2 s), standing or sitting.
 GREET_JOINTS = (
     "HeadYaw", "HeadPitch",
@@ -241,13 +307,13 @@ def build_wave(start):
     return names, angles, times
 
 
-def build_dance(start):
+def build_dance(start, style="default"):
     """Return (names, angles, times) for the dance, ending at the `start` angles."""
     names = sorted(DANCE_JOINTS)
     angles, times = [], []
     for n in names:
         a_row, t_row = [], []
-        for t, pose_dict in DANCE_STEPS:
+        for t, pose_dict in DANCE_STYLES[style]:
             t_row.append(t)
             if pose_dict is None:
                 a_row.append(start.get(n, MOCK_ARM_REST.get(n, 0.0)))
@@ -315,11 +381,21 @@ class MockRobot(object):
         self.posture_name = DEFAULT_POSTURE
         self._move_until = 0.0
         self.eyes = EYE_COLORS["blue"]
+        self.ears = False
         self.arm = dict(MOCK_ARM_REST)
+        # Time-based "worker": an animation or speech is active until its
+        # deadline; stop() cancels both by zeroing the deadlines.
+        self._anim_until = 0.0
+        self._speech_until = 0.0
 
     @property
     def moving(self):
         return time.time() < self._move_until
+
+    @property
+    def animating(self):
+        now = time.time()
+        return now < self._anim_until or now < self._speech_until
 
     def get_posture(self):
         return self.posture_name
@@ -334,7 +410,9 @@ class MockRobot(object):
 
     def stop(self):
         self._move_until = 0.0
-        log("MOCK stopMove()")
+        self._anim_until = 0.0
+        self._speech_until = 0.0
+        log("MOCK stop: move, animation and speech cancelled")
 
     def go_posture(self, name, speed):
         self._move_until = 0.0
@@ -346,10 +424,18 @@ class MockRobot(object):
         if isinstance(text, type(u"")):
             text = text.encode("utf-8")
         log("MOCK say: %s" % text)
+        self._speech_until = time.time() + max(0.3, 0.06 * len(text))
 
     def set_eyes(self, rgb):
         self.eyes = rgb
         log("MOCK eyes 0x%06X" % rgb)
+
+    def blink(self):
+        log("MOCK blink (flash, then back to 0x%06X)" % self.eyes)
+
+    def set_ears(self, on):
+        self.ears = bool(on)
+        log("MOCK ear leds %s" % ("on" if on else "off"))
 
     def sense(self):
         return self.sonar_left, self.sonar_right, self.moving, self.posture_name
@@ -364,10 +450,10 @@ class MockRobot(object):
         return dict((n, self.arm[n]) for n in names if n in self.arm)
 
     def play(self, names, angles, times):
+        """Start an animation and return at once; a new one replaces the old."""
         duration = max(t[-1] for t in times)
-        for n, a in zip(names, angles):
-            self.arm[n] = a[-1]
-        log("MOCK wave %.2fs (simulated, no robot moved)" % duration)
+        self._anim_until = time.time() + duration  # every choreography ends at the start pose
+        log("MOCK animation %.2fs started (simulated, no robot moved)" % duration)
         return duration
 
     def set_mock(self, sonar_left=None, sonar_right=None, posture=None, moving=None):
@@ -421,6 +507,10 @@ class NaoRobot(object):
             log("no ALSonar subscription: %s" % exc)
             self.sonar = None
         self._limits_cache = {}
+        self.eyes = EYE_COLORS["blue"]
+        self.ears = False
+        self._motion_task = None
+        self._speech_task = None
 
         # Same start-up as the professor's nao_show.py. Nothing is disabled.
         self.motion.stiffnessInterpolation("Body", 1.0, 1.0)
@@ -438,8 +528,35 @@ class NaoRobot(object):
     def move_to(self, x, theta):
         self.motion.post.moveTo(x, 0.0, theta)  # non-blocking
 
+    @staticmethod
+    def _running(proxy, task):
+        if proxy is None or task is None:
+            return False
+        try:
+            return bool(proxy.isRunning(task))
+        except Exception:
+            return False
+
+    @property
+    def animating(self):
+        return (self._running(self.motion, self._motion_task)
+                or self._running(self.tts, self._speech_task))
+
     def stop(self):
-        self.motion.stopMove()
+        """Interrupt moveTo, animations and speech; every step is attempted."""
+        failures = []
+        for what, call in (("stopMove", lambda: self.motion.stopMove()),
+                           ("killAll", lambda: self.motion.killAll()),
+                           ("tts.stopAll", lambda: self.tts.stopAll() if self.tts else None)):
+            try:
+                call()
+            except Exception as exc:
+                log("stop: %s failed: %s: %s" % (what, type(exc).__name__, exc))
+                failures.append("%s: %s: %s" % (what, type(exc).__name__, exc))
+        self._motion_task = None
+        self._speech_task = None
+        if failures:
+            raise RequestError("stop incomplete: " + "; ".join(failures))
 
     def go_posture(self, name, speed):
         return bool(self.posture.goToPosture(str(name), speed))
@@ -450,12 +567,41 @@ class NaoRobot(object):
             return
         if isinstance(text, type(u"")):
             text = text.encode("utf-8")
-        self.tts.say(text)
+        self._speech_task = self.tts.post.say(text)  # non-blocking
 
     def set_eyes(self, rgb):
+        self.eyes = rgb
         if self.leds is None:
             return
         self.leds.fadeRGB("FaceLeds", rgb, 0.2)
+
+    def blink(self):
+        if self.leds is None:
+            return
+
+        def flash():
+            try:
+                self.leds.fadeRGB("FaceLeds", 0xFFFFFF, 0.05)
+                time.sleep(0.15)
+            except Exception as exc:
+                log("blink failed: %s: %s" % (type(exc).__name__, exc))
+            finally:
+                try:
+                    self.leds.fadeRGB("FaceLeds", self.eyes, 0.1)  # latest colour
+                except Exception:
+                    pass
+        t = threading.Thread(target=flash)
+        t.daemon = True
+        t.start()
+
+    def set_ears(self, on):
+        if self.leds is None:
+            raise RequestError("ear leds unavailable: no ALLeds on the robot")
+        if on:
+            self.leds.on("EarLeds")
+        else:
+            self.leds.off("EarLeds")
+        self.ears = bool(on)
 
     def sense(self):
         left = float(self.memory.getData(SONAR_LEFT_KEY))
@@ -478,7 +624,12 @@ class NaoRobot(object):
 
     def play(self, names, angles, times):
         names = [str(n) for n in names]
-        self.motion.angleInterpolation(names, angles, times, True)  # blocking
+        angles = [[float(v) for v in row] for row in angles]
+        times = [[float(v) for v in row] for row in times]
+        if self._running(self.motion, self._motion_task):
+            self.motion.stop(self._motion_task)  # newest animation wins
+        self._motion_task = self.motion.post.angleInterpolation(
+            names, angles, times, True)  # non-blocking
         return max(t[-1] for t in times)
 
     def set_mock(self, **kwargs):
@@ -521,57 +672,53 @@ def cmd_move(robot, req):
     return {"ok": True, "x": cx, "theta": ct, "clamped": (cx != x or ct != theta)}
 
 
-def cmd_wave(robot, req):
+def _guarded(what, step, func, *args):
+    """Run one robot call; turn unexpected failures into a precise message."""
+    try:
+        return func(*args)
+    except RequestError:
+        raise
+    except Exception as exc:
+        log("%s: %s failed: %s: %s" % (what, step, type(exc).__name__, exc))
+        raise RequestError("%s: %s failed: %s: %s"
+                           % (what, step, type(exc).__name__, exc))
+
+
+def _run_animation(robot, what, joints, build, need_standing=True):
+    """Shared path of wave/dance/greet: checks, limits, validation, start (non-blocking)."""
     if robot.is_moving():
-        raise RequestError("cannot wave while moving; stop first")
-    _require_standing(robot, "wave")
-    names = sorted(WAVE_RAISED)
-    start = robot.current_angles(names)
-    limits = robot.limits(names)
+        raise RequestError("cannot %s while moving; stop first" % what)
+    if need_standing:
+        _require_standing(robot, what)
+    names = sorted(joints)
+    start = _guarded(what, "reading current angles", robot.current_angles, names)
+    limits = _guarded(what, "reading joint limits", robot.limits, names)
     for n in names:
         if n not in start:
             raise RequestError("cannot read current angle of %s" % n)
         lo, hi = limits[n]
         start[n] = _clamp(start[n], lo, hi)  # restore target must be valid too
-    names, angles, times = build_wave(start)
+    names, angles, times = build(start)
     validate_wave(robot, names, angles, times)
-    duration = robot.play(names, angles, times)
+    duration = _guarded(what, "starting the animation", robot.play, names, angles, times)
     return {"ok": True, "duration": duration}
+
+
+def cmd_wave(robot, req):
+    return _run_animation(robot, "wave", WAVE_RAISED, build_wave)
 
 
 def cmd_dance(robot, req):
-    if robot.is_moving():
-        raise RequestError("cannot dance while moving; stop first")
-    _require_standing(robot, "dance")
-    names = sorted(DANCE_JOINTS)
-    start = robot.current_angles(names)
-    limits = robot.limits(names)
-    for n in names:
-        if n not in start:
-            raise RequestError("cannot read current angle of %s" % n)
-        lo, hi = limits[n]
-        start[n] = _clamp(start[n], lo, hi)
-    names, angles, times = build_dance(start)
-    validate_wave(robot, names, angles, times)
-    duration = robot.play(names, angles, times)
-    return {"ok": True, "duration": duration}
+    style = req.get("style", "default")
+    if not isinstance(style, _STRING_TYPES) or style not in DANCE_STYLES:
+        raise RequestError("style must be one of %s" % ", ".join(sorted(DANCE_STYLES)))
+    style = str(style)
+    return _run_animation(robot, "dance", DANCE_JOINTS,
+                          lambda start: build_dance(start, style))
 
 
 def cmd_greet(robot, req):
-    if robot.is_moving():
-        raise RequestError("cannot greet while moving; stop first")
-    names = sorted(GREET_JOINTS)
-    start = robot.current_angles(names)
-    limits = robot.limits(names)
-    for n in names:
-        if n not in start:
-            raise RequestError("cannot read current angle of %s" % n)
-        lo, hi = limits[n]
-        start[n] = _clamp(start[n], lo, hi)
-    names, angles, times = build_greet(start)
-    validate_wave(robot, names, angles, times)
-    duration = robot.play(names, angles, times)
-    return {"ok": True, "duration": duration}
+    return _run_animation(robot, "greet", GREET_JOINTS, build_greet, need_standing=False)
 
 
 def cmd_posture(robot, req):
@@ -590,6 +737,19 @@ def cmd_eyes(robot, req):
     if not isinstance(color, _STRING_TYPES) or color not in EYE_COLORS:
         raise RequestError("color must be one of %s" % ", ".join(sorted(EYE_COLORS)))
     robot.set_eyes(EYE_COLORS[color])
+    return {"ok": True}
+
+
+def cmd_blink(robot, req):
+    _guarded("blink", "flashing the eyes", robot.blink)
+    return {"ok": True}
+
+
+def cmd_ear_leds(robot, req):
+    on = req.get("on")
+    if not isinstance(on, bool):
+        raise RequestError("on must be a boolean")
+    _guarded("ear_leds", "switching the ear leds", robot.set_ears, on)
     return {"ok": True}
 
 
@@ -625,7 +785,9 @@ def handle(robot, req):
     if cmd == "sense":
         left, right, moving, posture = robot.sense()
         return {"ok": True, "sonar_left": left, "sonar_right": right,
-                "moving": moving, "posture": posture}, False
+                "moving": moving, "posture": posture,
+                "animating": bool(robot.animating),
+                "eyes": robot.eyes, "ears": bool(robot.ears)}, False
     if cmd == "move":
         return cmd_move(robot, req), False
     if cmd == "stop":
@@ -647,6 +809,10 @@ def handle(robot, req):
         return {"ok": True}, False
     if cmd == "eyes":
         return cmd_eyes(robot, req), False
+    if cmd == "blink":
+        return cmd_blink(robot, req), False
+    if cmd == "ear_leds":
+        return cmd_ear_leds(robot, req), False
     if cmd == "set_mock":
         return cmd_set_mock(robot, req), False
     if cmd == "quit":
@@ -668,9 +834,11 @@ def process_line(robot, line):
         try:
             resp, quit_now = handle(robot, req)
         except RequestError as exc:
-            resp = {"ok": False, "error": str(exc)}
+            resp = {"ok": False, "error": str(exc) or "request refused"}
         except Exception as exc:
             resp = {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+    if not resp.get("ok") and not resp.get("error"):
+        resp["error"] = "unspecified bridge error"
     resp["simulated"] = bool(robot.is_mock)
     return resp, quit_now
 

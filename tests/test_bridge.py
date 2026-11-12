@@ -339,3 +339,174 @@ def test_client_skips_non_json_lines(tmp_path, monkeypatch):
         assert c.sense() == {"ok": True, "echo": "sense"}
     finally:
         c.close()
+
+
+# -- phase 1: non-blocking, animating flag, stop interrupts everything ---------
+def _animating(client):
+    return client.sense()["animating"]
+
+
+@pytest.mark.parametrize("call", ["wave", "dance", "greet"])
+def test_animations_return_immediately_and_flag_animating(client, call):
+    assert _animating(client) is False
+    t0 = time.time()
+    r = getattr(client, call)()
+    assert time.time() - t0 < 1.0  # dance is ~5.6 s, must not block
+    assert r["ok"] is True and r["duration"] > 1.0
+    assert _animating(client) is True
+
+
+def test_say_is_non_blocking_and_flags_animating(client):
+    t0 = time.time()
+    assert client.say("Hola, esto es una frase larga para que dure un rato")["ok"] is True
+    assert time.time() - t0 < 1.0
+    assert _animating(client) is True
+
+
+def test_animating_clears_by_itself(client):
+    client.greet()  # ~2.2 s
+    assert _animating(client) is True
+    deadline = time.time() + 5
+    while time.time() < deadline and _animating(client):
+        time.sleep(0.1)
+    assert _animating(client) is False
+
+
+@pytest.mark.parametrize("call", ["wave", "dance", "greet"])
+def test_stop_interrupts_animation(client, call):
+    getattr(client, call)()
+    assert _animating(client) is True
+    assert client.stop()["ok"] is True
+    assert _animating(client) is False
+
+
+def test_stop_interrupts_speech(client):
+    client.say("Una frase bastante larga para que la voz dure varios segundos")
+    assert _animating(client) is True
+    client.stop()
+    assert _animating(client) is False
+
+
+def test_stop_interrupts_move_dance_and_speech_together(client):
+    client.say("Una frase bastante larga para que la voz dure varios segundos")
+    client.dance()
+    client.stop()
+    s = client.sense()
+    assert s["animating"] is False and s["moving"] is False
+    assert client.move(0.3, 0.0)["ok"] is True
+    client.stop()
+    assert client.sense()["moving"] is False
+
+
+def test_new_animation_after_stop_is_accepted(client):
+    client.dance()
+    client.stop()
+    assert client.wave()["ok"] is True
+
+
+# -- dance styles ---------------------------------------------------------------
+@pytest.mark.parametrize("style", ["default", "loop_a", "loop_b", "loop_c", "loop_d"])
+def test_dance_styles_are_short_enough_to_chain(client, style):
+    r = client.dance(style)
+    assert r["ok"] is True
+    assert 0 < r["duration"] <= 6.0
+    if style.startswith("loop_"):
+        assert 3.0 <= r["duration"] <= 5.0
+
+
+def test_dance_default_keeps_old_duration(client):
+    assert client.dance()["duration"] == pytest.approx(5.6)
+    client.stop()
+    assert client.dance("default")["duration"] == pytest.approx(5.6)
+
+
+def test_dance_champions_is_longer_celebration(client):
+    r = client.dance("champions")
+    assert r["ok"] is True
+    assert 7.0 <= r["duration"] <= 9.0
+
+
+@pytest.mark.parametrize("style", ["bogus", "", None, 3, "LOOP_A"])
+def test_dance_rejects_unknown_style(client, style):
+    r = client.dance(style)
+    assert r["ok"] is False and "style" in r["error"]
+    assert _animating(client) is False
+
+
+def test_dance_refused_when_sitting_or_moving(client):
+    client.posture("Sit")
+    r = client.dance("loop_a")
+    assert r["ok"] is False and "stand" in r["error"].lower()
+    client.posture("StandInit")
+    client.move(0.3, 0.0)
+    assert client.dance("loop_a")["ok"] is False
+
+
+def test_dance_style_choreographies_pass_limit_validation():
+    sys.path.insert(0, os.path.join(ROOT, "bridge"))
+    import nao_bridge as nb
+
+    robot = nb.MockRobot()
+    for style in nb.DANCE_STYLES:
+        names = sorted(nb.DANCE_JOINTS)
+        start = robot.current_angles(names)
+        n, a, t = nb.build_dance(start, style)
+        nb.validate_wave(robot, n, a, t)  # whitelist + limits + velocity
+
+
+# -- blink / ears / colours -----------------------------------------------------
+def test_blink_keeps_previous_colour(client):
+    client.eyes("purple")
+    assert client.blink()["ok"] is True
+    assert client.sense()["eyes"] == 0x800080
+
+
+@pytest.mark.parametrize("color, rgb", [("purple", 0x800080), ("blue", 0x0000FF)])
+def test_eyes_purple_and_blue(client, color, rgb):
+    assert client.eyes(color)["ok"] is True
+    assert client.sense()["eyes"] == rgb
+
+
+def test_ear_leds_toggle(client):
+    assert client.sense()["ears"] is False
+    assert client.ears(True)["ok"] is True
+    assert client.sense()["ears"] is True
+    assert client.ears(False)["ok"] is True
+    assert client.sense()["ears"] is False
+
+
+@pytest.mark.parametrize("raw", ['{"cmd":"ear_leds"}', '{"cmd":"ear_leds","on":"yes"}',
+                                 '{"cmd":"ear_leds","on":1}'])
+def test_ear_leds_requires_bool(client, raw):
+    client._write_line(raw)
+    reply = json.loads(client._read_line())
+    assert reply["ok"] is False and "on" in reply["error"]
+
+
+# -- error visibility -----------------------------------------------------------
+def test_every_error_response_has_non_empty_error_text(client):
+    replies = [
+        client.dance("bogus"), client.posture("Bogus"), client.eyes("nope"),
+        client._call(cmd="ear_leds"),
+        client._call(cmd="bogus_cmd"),
+    ]
+    for r in replies:
+        assert r["ok"] is False
+        assert isinstance(r["error"], str) and r["error"].strip()
+
+
+def test_client_keeps_last_error(client):
+    assert client.last_error is None
+    client.dance("bogus")
+    assert "style" in client.last_error
+    client.ping()
+    assert client.last_error is None
+
+
+def test_client_can_raise_with_bridge_error_text():
+    with NaoClient(mock=True, python27=PYTHON27, timeout=15, raise_on_error=True) as c:
+        with pytest.raises(NaoBridgeError) as info:
+            c.dance("bogus")
+        assert "style" in str(info.value) and "dance" in str(info.value)
+        assert "style" in c.last_error
+        assert c.ping()["ok"] is True
