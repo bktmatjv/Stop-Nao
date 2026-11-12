@@ -186,6 +186,7 @@ class SoundBackend:
 
     def _start(self, path: Path, offset: float) -> None:
         with self._lock:
+            self._halt()  # whatever is sounding stops NOW: tracks never overlap while loading
             self._generation += 1
             generation = self._generation
             self._path = path

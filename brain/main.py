@@ -37,6 +37,7 @@ import math
 import os
 import queue
 import sys
+import threading
 import time
 import types
 import unicodedata
@@ -44,11 +45,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from . import vocab
+from .async_client import AsyncClient, Ticket
 from .config import DEFAULT_ENV_PATH, Config, load_config, parse_env_file
 from .context import FEATURE_COLUMNS
 from .context.safety import MIN_CONF, Decision, validate
 from .gestures.features import hand_size
-from .music import MusicPlayer
 from .voice.keywords import keyword_intent
 
 NONE_LABEL = "NONE"
@@ -57,6 +58,7 @@ DEFAULT_COOLDOWN = 2.5  # s between two robot commands
 DEFAULT_CONFIRM_WINDOW = 4.0  # s to repeat a gesture after ASK_CONFIRM
 SPEECH_GAP = 3.0  # s: the same sentence is not spoken twice within this time
 SENSE_INTERVAL = 0.5  # s between sonar refreshes for the overlay
+SENSE_MAX_AGE = 1.0  # s: an older cached sonar reading is treated as invalid (fail safe)
 # The predictor must let low-confidence gestures through so the safety layer
 # can answer ASK_CONFIRM; below this it reports NONE.
 PREDICTOR_MIN_CONF = 0.4
@@ -140,6 +142,27 @@ class ExecResult:
     acks: list = field(default_factory=list)
     motion_ack_t: float | None = None  # clock value when the motion command was acknowledged
     simulated: bool = False
+    # Async client only: the commands are queued, so the outcome arrives later.
+    tickets: list = field(default_factory=list)
+    done: bool = True          # False until every queued command has finished
+    cancelled: bool = False    # a queued command was dropped by an emergency stop
+    _lock: object = field(default_factory=threading.Lock, repr=False)
+    _callbacks: list = field(default_factory=list, repr=False)
+
+    def when_done(self, fn) -> None:
+        """Call ``fn(result)`` once the outcome is final (at once for a synchronous client)."""
+        with self._lock:
+            if not self.done:
+                self._callbacks.append(fn)
+                return
+        fn(self)
+
+    def _mark_done(self) -> None:
+        with self._lock:
+            self.done = True
+            callbacks, self._callbacks = self._callbacks, []
+        for fn in callbacks:
+            fn(self)
 
 
 class Executor:
@@ -151,11 +174,13 @@ class Executor:
     """
 
     def __init__(self, client, speech: SpeechGate | None = None, clock=time.perf_counter,
-                 music: MusicPlayer | None = None):
+                 music=None, on_halt=None):
+        # ``music`` is accepted for compatibility and ignored: the executor never plays audio
+        # (the DJPlayer is the only audio source). ``on_halt`` runs on every safety stop.
         self.client = client
         self.speech = speech or SpeechGate()
         self.clock = clock
-        self.music = music or MusicPlayer()
+        self.on_halt = on_halt
 
     def execute(self, decision, moving: bool, now: float | None = None) -> ExecResult:
         now = self.clock() if now is None else now
@@ -163,6 +188,9 @@ class Executor:
 
         def send(ack: dict) -> dict:
             result.acks.append(ack)
+            if isinstance(ack, Ticket):  # queued on the async worker: outcome comes later
+                result.tickets.append(ack)
+                return ack
             result.simulated = result.simulated or bool(ack.get("simulated"))
             if not ack.get("ok"):
                 result.errors.append(str(ack.get("error", "unknown error")))
@@ -172,14 +200,14 @@ class Executor:
         warn = action.startswith("WARN_")
         if action in ("STOP", "SIT", "STAND") or (warn and moving):
             send(self.client.stop())
-            self.music.stop()
+            if self.on_halt is not None:
+                self.on_halt()
         send(self.client.eyes(decision.eye_color))
         if action in ("ADVANCE", "ADVANCE_SHORT"):
             send(self.client.move(float(params["x"]), 0.0))
         elif action in ("TURN_LEFT", "TURN_RIGHT"):
             send(self.client.move(0.0, float(params["theta"])))
         elif action in ("WAVE", "DANCE"):
-            self.music.play_random()
             if hasattr(self.client, "dance"):
                 send(self.client.dance())
             else:
@@ -196,6 +224,11 @@ class Executor:
         # ASK_CONFIRM / WAIT / WARN_*: no motion
         result.motion_ack_t = self.clock()
 
+        if result.tickets:
+            result.done = False
+            self._settle(decision, result, now)
+            return result
+
         if result.errors:
             result.ok = False
             print(f"WARNING: bridge refused a command: {'; '.join(result.errors)}", file=sys.stderr)
@@ -206,6 +239,40 @@ class Executor:
         if text and self.speech.allow(text, now):
             self.client.say(text)
         return result
+
+
+    def _settle(self, decision, result: ExecResult, now: float) -> None:
+        """Async client: once every queued command finished, apply the refusal feedback.
+
+        Same outcome as the synchronous path: a refused command turns the eyes red and
+        speaks the error instead of the reason. Runs on the worker thread (or at once).
+        """
+        tickets = list(result.tickets)
+        remaining = [len(tickets)]
+        lock = threading.Lock()
+
+        def one_done(_ticket) -> None:
+            with lock:
+                remaining[0] -= 1
+                if remaining[0]:
+                    return
+            result.errors = [t.error for t in tickets if t.error and not t.cancelled]
+            result.cancelled = any(t.cancelled for t in tickets)
+            result.ok = not result.errors and not result.cancelled
+            result.simulated = any(isinstance(t.response, dict) and t.response.get("simulated")
+                                   for t in tickets)
+            text = None if result.cancelled and not result.errors else decision.reason
+            if result.errors:
+                print(f"WARNING: bridge refused a command: {'; '.join(result.errors)}",
+                      file=sys.stderr)
+                _call(self.client, "eyes", "red")
+                text = ERROR_SPEECH
+            if text and self.speech.allow(text, now):
+                _call(self.client, "say", text)
+            result._mark_done()
+
+        for ticket in tickets:
+            ticket.add_done_callback(one_done)
 
 
 class ConfirmationTracker:
@@ -286,6 +353,8 @@ class DecisionLogger:
         self._fh.flush()
 
     def log(self, record: DecisionRecord) -> None:
+        if self._fh.closed:
+            return
         self._writer.writerow(record.row())
         self._fh.flush()
 
@@ -370,10 +439,15 @@ class Pilot:
                  logger: DecisionLogger | None = None,
                  sense_interval: float | None = SENSE_INTERVAL,
                  sonar_override: "VirtualSonar | None" = None,
-                 music: MusicPlayer | None = None, dj=None, predictor2=None, hold=None,
+                 music=None, dj=None, predictor2=None, hold=None,
                  voice=None, confirm_ambiguous: bool = False,
-                 blink_interval: float = BLINK_INTERVAL, dance_interval: float = DANCE_INTERVAL):
+                 blink_interval: float = BLINK_INTERVAL, dance_interval: float = DANCE_INTERVAL,
+                 sense_max_age: float = SENSE_MAX_AGE):
         self.client = client
+        self._async = bool(getattr(client, "is_async", False))  # AsyncClient: never blocks
+        self.sense_max_age = sense_max_age
+        self._log_lock = threading.Lock()
+        self._log_queue: list = []  # [record, ready] in decision order; flushed head-first
         self.sonar_override = sonar_override
         self.predictor = predictor
         self.predictor2 = predictor2  # second hand; enables the two-hands mode toggle
@@ -386,13 +460,12 @@ class Pilot:
         self.clock = clock
         self.logger = logger
         self.sense_interval = sense_interval
-        self.music = music or MusicPlayer()
         self.dj = dj
         self.dance = DanceLoop(client, dance_interval)
         self.voice = voice
         self.confirm_ambiguous = confirm_ambiguous
         self.blink_interval = blink_interval
-        self.executor = Executor(client, clock=clock, music=self.music)
+        self.executor = Executor(client, clock=clock, on_halt=self._halt_media)
         self.confirm = ConfirmationTracker(confirm_window)
         self.mode = vocab.MODE_MOVEMENT
         self.input_mode = vocab.INPUT_GESTURES
@@ -421,8 +494,17 @@ class Pilot:
         now = self.clock() if now is None else now
         return max(0.0, self.cooldown - (now - self._last_fire))
 
+    def _cached_sense(self) -> dict:
+        """Newest background reading of the async client; stale or missing counts as invalid."""
+        reading, age = self.client.latest_sense()
+        if reading is None or age is None:
+            return {"ok": False, "error": "no sonar reading yet"}
+        if age > self.sense_max_age:
+            return {"ok": False, "error": "stale sonar reading (%.1f s old)" % age}
+        return reading
+
     def _read_sense(self, now: float) -> dict:
-        reading = self.client.sense()
+        reading = self._cached_sense() if self._async else self.client.sense()
         if reading.get("ok") and self.sonar_override is not None:
             reading = self.sonar_override.patch(reading)
         if reading.get("ok"):
@@ -432,6 +514,9 @@ class Pilot:
 
     def _refresh_sense(self, now: float) -> None:
         if self.sense_interval is None:
+            return
+        if self._async:
+            self._read_sense(now)  # cache lookup only, no I/O
             return
         if self._last_sense_t is None or now - self._last_sense_t >= self.sense_interval:
             self._read_sense(now)
@@ -493,7 +578,6 @@ class Pilot:
 
     def stop_media(self) -> None:
         """Stop the music and the dance loop completely (also used on shutdown)."""
-        self.music.stop()
         if self.dj is not None:
             self.dj.stop()
         self.dance.stop()
@@ -560,9 +644,9 @@ class Pilot:
         outcome = self._apply_intent(intent, now, conf, label, size)
         if outcome is None:
             return None
-        decision, ctx, ok, requested = outcome
+        decision, ctx, ok, requested, result = outcome
         return self._record(label, conf, ctx, requested, decision, ok, False,
-                            (self.clock() - t0) * 1000.0)
+                            (self.clock() - t0) * 1000.0, result=result)
 
     def _apply_intent(self, intent: str, now: float, conf: float, label: str, size: float):
         """-> (decision, ctx, ok, requested) or None when the intent is not actionable."""
@@ -574,7 +658,7 @@ class Pilot:
                 action = vocab.SIT if ctx["standing"] else vocab.STAND
             decision = validate(action, ctx)
             result = self.executor.execute(decision, moving=bool(ctx["moving"]), now=now)
-            return decision, ctx, bool(sense.get("ok")) and result.ok, action
+            return decision, ctx, bool(sense.get("ok")) and result.ok, action, result
         ctx = build_context(label, conf, self.sense or {"ok": False}, size)
         spoken = False
         if intent == vocab.STOP:
@@ -623,7 +707,7 @@ class Pilot:
             return None
         if spoken:
             self._say(text, now)
-        return Decision(intent, {}, text, self.eye_color), ctx, True, intent
+        return Decision(intent, {}, text, self.eye_color), ctx, True, intent, None
 
     def _music_play(self, now: float) -> str:
         if self.dj is None or not self.dj.play():
@@ -732,7 +816,7 @@ class Pilot:
             label, conf, ctx, requested or "", decision,
             bool(sense.get("ok")) and result.ok,
             bool(sense.get("simulated")) or bool(sense.get("virtual_sonar")) or result.simulated,
-            latency_ms, self.last_explain)
+            latency_ms, self.last_explain, result=result)
 
     def _fire_special(self, intent: str, label: str, conf: float, size: float, now: float,
                       confirming: bool):
@@ -749,12 +833,12 @@ class Pilot:
             result = self.executor.execute(decision, moving=False, now=now)
             self.confirm.ask(label, now)
             return self._record(label, conf, ctx, intent, decision, result.ok, result.simulated,
-                                (self.clock() - t0) * 1000.0)
+                                (self.clock() - t0) * 1000.0, result=result)
         self.confirm.clear()
         return self.handle_intent(intent, now, conf, label, size)
 
     def _record(self, label, conf, ctx, requested, decision, bridge_ok, simulated, latency_ms,
-                explain: str = "") -> DecisionRecord:
+                explain: str = "", result: ExecResult | None = None) -> DecisionRecord:
         record = DecisionRecord(
             timestamp=datetime.now().isoformat(timespec="milliseconds"),
             gesture=label, confidence=float(conf), context=ctx, requested_intent=requested,
@@ -763,11 +847,40 @@ class Pilot:
             bridge_error=self._bridge_error(),
         )
         self.last_record = record
-        if self.logger is not None:
-            self.logger.log(record)
-        print(f"[{record.timestamp}] {label} ({conf:.2f}) -> {decision.action}  "
-              f"[{decision.reason}]  {latency_ms:.0f} ms", flush=True)
+        entry = [record, False]
+        with self._log_lock:
+            self._log_queue.append(entry)
+        if result is None or not result.tickets:
+            self._complete(entry)
+        else:  # queued commands: the row is written when the worker has finished them
+            result.when_done(lambda res: self._finish_async(entry, res, latency_ms))
         return record
+
+    def _finish_async(self, entry, result: ExecResult, pilot_ms: float) -> None:
+        """Fill the record with the real outcome of the queued commands, then log it."""
+        record = entry[0]
+        record.bridge_ok = record.bridge_ok and result.ok
+        record.simulated = record.simulated or result.simulated
+        if result.errors:
+            record.bridge_error = result.errors[0]
+        elif result.cancelled:
+            record.bridge_error = "cancelled by stop"
+        motion = result.tickets[-1]  # the last command before the speech is the motion itself
+        if motion.finished_at is not None:
+            record.latency_ms = pilot_ms + (motion.finished_at - motion.enqueued_at) * 1000.0
+        self._complete(entry)
+
+    def _complete(self, entry) -> None:
+        """Mark a record final and write every final record at the head of the queue, in order."""
+        with self._log_lock:
+            entry[1] = True
+            while self._log_queue and self._log_queue[0][1]:
+                record = self._log_queue.pop(0)[0]
+                if self.logger is not None:
+                    self.logger.log(record)
+                print(f"[{record.timestamp}] {record.gesture} ({record.confidence:.2f}) -> "
+                      f"{record.decision.action}  [{record.decision.reason}]  "
+                      f"{record.latency_ms:.0f} ms", flush=True)
 
 
 class VirtualSonar:
@@ -871,7 +984,7 @@ class MockScenario:
                 f"| postura {self.posture}")
 
 
-def shutdown(client, music: MusicPlayer | None = None) -> None:
+def shutdown(client, music=None) -> None:
     """Always try to stop the robot, stop music, turn the eyes blue and close the bridge. Never raises.
 
     Stiffness is never released.
@@ -892,7 +1005,7 @@ def shutdown(client, music: MusicPlayer | None = None) -> None:
         print(f"WARNING: error closing the bridge: {exc}", file=sys.stderr)
 
 
-def run_session(client, loop, music: MusicPlayer | None = None):
+def run_session(client, loop, music=None):
     """Run ``loop()``; whatever happens, stop the robot, blue eyes and close the bridge."""
     try:
         return loop()
@@ -979,6 +1092,14 @@ def draw_overlay(cv2, display, pilot: Pilot, scenario: MockScenario | None, now:
                   (0, 165, 255), -1)
 
 
+def configure_capture(cv2, cap) -> None:
+    """Ask the driver for a 1-frame buffer so the preview shows the newest frame (best effort)."""
+    try:
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    except Exception:
+        pass
+
+
 def camera_loop(args, pilot: Pilot, scenario: MockScenario | None) -> int:
     # Heavy imports are deferred so --help and the pure logic stay light.
     import cv2
@@ -989,6 +1110,7 @@ def camera_loop(args, pilot: Pilot, scenario: MockScenario | None) -> int:
     if not cap.isOpened():
         print(f"ERROR: no se puede abrir la camara {args.camera}", file=sys.stderr)
         return 1
+    configure_capture(cv2, cap)
     mp_hands = mp.solutions.hands
     mp_draw = mp.solutions.drawing_utils
     window = "NAO gestos de mano"
@@ -1162,12 +1284,14 @@ def main(argv: list[str] | None = None, config: Config | None = None) -> int:
         print(f"ROBOT REAL ({args.robot}): despeja el piso y deja a alguien junto al NAO.")
 
     try:
-        client = NaoClient(robot=args.robot or "sim", mock=args.mock, ip=args.ip, port=args.port)
+        raw_client = NaoClient(robot=args.robot or "sim", mock=args.mock, ip=args.ip, port=args.port)
     except NaoBridgeError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         logger.close()
         return 1
 
+    # Every robot call runs on one worker thread: the camera loop never waits for the bridge.
+    client = AsyncClient(raw_client, sense_interval=SENSE_INTERVAL)
     virtual = VirtualSonar() if args.virtual_sonar else None
     dj = DJPlayer(args.music_dir, args.champions_song)
     pilot = Pilot(client, predictor, decider, cooldown=args.cooldown,
@@ -1178,7 +1302,7 @@ def main(argv: list[str] | None = None, config: Config | None = None) -> int:
     scenario = MockScenario(client) if args.mock else virtual
 
     def loop() -> int:
-        ping = client.ping()
+        ping = raw_client.ping()  # startup check, before the first frame
         print(f"Puente listo (mock={ping.get('mock')}).")
         pilot.announce_state()
         return camera_loop(args, pilot, scenario)

@@ -472,3 +472,56 @@ def test_cli_defaults_come_from_config_and_cli_wins():
     assert args.music_dir == "x"
     assert brain_main.configured_endpoint(cfg, {"NAO_IP": "10.0.0.5"}) == ("10.0.0.5", None)
     assert brain_main.configured_endpoint(cfg, {}) == (None, None)
+
+
+# ------------------------------------------------ dance whenever a DJ track plays
+@pytest.mark.parametrize("intent", [vocab.MUSIC_NEXT, vocab.MUSIC_PREV])
+def test_next_and_previous_keep_the_loop_while_playing(intent):
+    dj = DJ()
+    c, p = make([("NONE", 0.0)], dj=dj)
+    p.handle_intent(vocab.MUSIC_PLAY, 0.0)
+    c.calls.clear()
+    p.handle_intent(intent, 1.0)
+    assert dj.playing and p.dance.active
+    assert c.dances() == []  # the running loop is kept, not restarted on top of itself
+
+
+@pytest.mark.parametrize("intent", [vocab.MUSIC_NEXT, vocab.MUSIC_PREV])
+def test_next_and_previous_while_paused_stay_paused_without_dancing(intent):
+    dj = DJ()
+    c, p = make([("NONE", 0.0)], dj=dj)
+    p.handle_intent(vocab.MUSIC_PLAY, 0.0)
+    p.handle_intent(vocab.MUSIC_PAUSE, 1.0)
+    c.calls.clear()
+    p.handle_intent(intent, 2.0)
+    assert dj.paused and not dj.playing
+    assert not p.dance.active and c.dances() == []
+
+
+@pytest.mark.parametrize("intent", [vocab.MUSIC_NEXT, vocab.MUSIC_PREV])
+def test_next_and_previous_start_the_loop_if_a_track_is_playing_without_one(intent):
+    dj = DJ()
+    c, p = make([("NONE", 0.0)], dj=dj)
+    dj.playing = True  # e.g. right after the champions song, whose dance is not a loop
+    p.handle_intent(intent, 1.0)
+    assert p.dance.active and c.dances() == ["loop_a"]
+
+
+def test_celebrate_dances_champions_once_and_never_starts_the_loop():
+    dj = DJ()
+    c, p = make([("NONE", 0.0)], dj=dj)
+    p.handle_intent(vocab.MUSIC_PLAY, 0.0)
+    assert p.dance.active
+    c.calls.clear()
+    p.handle_intent(vocab.CELEBRATE, 1.0)
+    assert c.dances() == ["champions"] and not p.dance.active
+    p.tick(100.0)
+    assert c.dances() == ["champions"]  # still no loop step afterwards
+
+
+def test_pause_stop_and_estop_still_stop_the_loop():
+    for intent in (vocab.MUSIC_PAUSE, vocab.MUSIC_STOP, vocab.STOP):
+        c, p = make([("NONE", 0.0)], dj=DJ())
+        p.handle_intent(vocab.MUSIC_PLAY, 0.0)
+        p.handle_intent(intent, 1.0)
+        assert not p.dance.active, intent

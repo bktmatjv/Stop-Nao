@@ -18,6 +18,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from brain import main as brain_main  # noqa: E402
+from brain.config import Config  # noqa: E402
 from brain.context import FEATURE_COLUMNS  # noqa: E402
 from brain.context.decider import ContextDecider  # noqa: E402
 from brain.context.safety import Decision  # noqa: E402
@@ -689,8 +690,211 @@ def test_virtual_sonar_is_refused_on_the_real_robot_and_in_mock(argv, capsys):
     ["--robot", "nyx", "--ip", "192.168.108.90", "--port", "9559", "--virtual-sonar"],
     ["--robot", "sim", "--virtual-sonar"],  # the sim profile points to another machine
 ])
-def test_virtual_sonar_only_on_this_computer(argv, capsys):
+def test_virtual_sonar_only_on_this_computer(argv, capsys, monkeypatch, tmp_path):
+    # independent of the developer's .env / environment (a local NAO_IP would pass the check)
+    monkeypatch.setattr(brain_main, "DEFAULT_ENV_PATH", str(tmp_path / "none.env"))
+    monkeypatch.delenv("NAO_IP", raising=False)
+    monkeypatch.delenv("NAO_PORT", raising=False)
     with pytest.raises(SystemExit) as exc:
-        brain_main.main(argv)
+        brain_main.main(argv, config=Config())
     assert exc.value.code == 2
     assert "127.0.0.1" in capsys.readouterr().err
+
+
+# ------------------------------------------------- async client: nothing blocks the frame loop
+import threading  # noqa: E402
+import time  # noqa: E402
+
+from brain.async_client import AsyncClient  # noqa: E402
+
+
+class SlowFake(FakeClient):
+    """FakeClient whose commands take time; ``hold`` blocks the named command until released."""
+
+    def __init__(self, delays=None, **kw):
+        super().__init__(**kw)
+        self.delays = delays or {}
+        self.hold = None
+        self.release = threading.Event()
+        self.started = threading.Event()
+
+    def _ack(self, *call):
+        self.started.set()
+        if self.hold == call[0]:
+            self.release.wait(5)
+        else:
+            time.sleep(self.delays.get(call[0], 0.0))
+        return super()._ack(*call)
+
+
+def async_pilot(client, script, logger=None, clock=None, **kw):
+    ac = AsyncClient(client, sense_interval=None, **({"clock": clock} if clock else {}))
+    assert ac.sense().wait(2)  # one cached reading, as the background poll would give
+    return ac, make_pilot(ac, script, logger=logger, **kw)
+
+
+def wait_rows(path, count, timeout=3.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        with open(path, encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+        if len(rows) >= count:
+            return rows
+        time.sleep(0.01)
+    raise AssertionError("log rows did not arrive")
+
+
+def test_stale_cached_sonar_fails_safe_like_an_invalid_reading():
+    now = [10.0]
+    ac, pilot = async_pilot(SlowFake(), [("THUMBS_UP", 0.9)], clock=lambda: now[0])
+    now[0] = 10.5  # fresh enough (< 1.0 s)
+    assert pilot.step(HAND, "Right", now=0.0).decision.action == "ADVANCE"
+    ac.close()
+
+    now = [10.0]
+    ac, pilot = async_pilot(SlowFake(), [("THUMBS_UP", 0.9)], clock=lambda: now[0])
+    now[0] = 11.5  # reading is 1.5 s old: never act on it
+    stale = pilot.step(HAND, "Right", now=0.0)
+    assert stale.decision.action == "WARN_OBSTACLE"
+    assert math.isnan(stale.context["sonar_left"]) and stale.context["standing"] == 0
+    ac.close()
+
+
+def test_missing_cached_sonar_fails_safe():
+    ac = AsyncClient(SlowFake(), sense_interval=None)  # never sensed
+    pilot = make_pilot(ac, [("THUMBS_UP", 0.9)])
+    assert pilot.step(HAND, "Right", now=0.0).decision.action == "WARN_OBSTACLE"
+    ac.close()
+
+
+def test_stale_sonar_still_allows_stop():
+    now = [0.0]
+    ac, pilot = async_pilot(SlowFake(), [("OPEN_PALM", 0.95)], clock=lambda: now[0])
+    now[0] = 5.0
+    assert pilot.step(HAND, "Right", now=0.0).decision.action == "STOP"
+    ac.close()
+
+
+def test_frame_loop_returns_at_once_while_the_robot_is_slow():
+    client = SlowFake({"eyes": 0.3, "move": 0.5, "say": 0.3})
+    ac, pilot = async_pilot(client, [("THUMBS_UP", 0.9)])
+    t0 = time.perf_counter()
+    record = pilot.step(HAND, "Right", now=0.0)
+    assert time.perf_counter() - t0 < 0.2  # eyes+move+say would take >1 s synchronously
+    assert record.decision.action == "ADVANCE"
+    ac.close()
+
+
+def test_estop_returns_under_50ms_while_the_worker_is_stuck_in_posture():
+    client = SlowFake()
+    client.hold = "posture"
+    ac, pilot = async_pilot(client, [("OPEN_PALM", 0.95)])
+    ac.posture("Sit")
+    assert client.started.wait(2)
+    t0 = time.perf_counter()
+    pilot.handle_intent("STOP", now=0.0)
+    assert time.perf_counter() - t0 < 0.05
+    t0 = time.perf_counter()
+    record = pilot.step(HAND, "Right", now=5.0)  # gesture path: OPEN_PALM
+    assert time.perf_counter() - t0 < 0.05
+    assert record.decision.action == "STOP"
+    client.release.set()
+    ac.close()
+    assert ("stop",) in client.calls
+
+
+def test_log_row_is_written_when_the_worker_finishes_with_real_outcome(tmp_path):
+    path = tmp_path / "log.csv"
+    logger = DecisionLogger(str(path))
+    client = SlowFake({"move": 0.25}, fail={"move"})
+    ac, pilot = async_pilot(client, [("THUMBS_UP", 0.9)], logger=logger)
+    record = pilot.step(HAND, "Right", now=0.0)
+    with open(path, encoding="utf-8") as fh:
+        assert len(list(csv.DictReader(fh))) == 0  # not logged at enqueue time
+    row = wait_rows(path, 1)[0]
+    assert row["bridge_ok"] == "0" and row["bridge_error"] == "move: move refused"
+    assert float(row["latency_ms"]) >= 250.0
+    assert record.bridge_ok is False and record.bridge_error == "move: move refused"
+    deadline = time.time() + 2
+    while ("say", "No pude ejecutar la orden.") not in client.calls and time.time() < deadline:
+        time.sleep(0.01)
+    assert ("eyes", "red") in client.calls and ("say", "No pude ejecutar la orden.") in client.calls
+    assert ("say", "Razon.") not in client.calls
+    ac.close()
+    logger.close()
+
+
+def test_successful_async_rows_are_ok_and_keep_decision_order(tmp_path):
+    path = tmp_path / "log.csv"
+    logger = DecisionLogger(str(path))
+    client = SlowFake({"move": 0.1})
+    ac, pilot = async_pilot(client, [("THUMBS_UP", 0.9), ("NONE", 0.0), ("POINT_LEFT", 0.9)],
+                            logger=logger)
+    pilot.step(HAND, "Right", now=0.0)
+    pilot.step(None, None, now=1.0)
+    pilot.step(HAND, "Right", now=5.0)
+    rows = wait_rows(path, 2)
+    assert [r["requested_intent"] for r in rows] == ["ADVANCE", "TURN_RIGHT"]
+    assert all(r["bridge_ok"] == "1" and r["bridge_error"] == "" for r in rows)
+    ac.close()
+    logger.close()
+
+
+def test_emergency_stop_cancels_queued_commands_without_error_speech(tmp_path):
+    path = tmp_path / "log.csv"
+    logger = DecisionLogger(str(path))
+    client = SlowFake()
+    client.hold = "eyes"
+    ac, pilot = async_pilot(client, [("THUMBS_UP", 0.9)], logger=logger)
+    pilot.step(HAND, "Right", now=0.0)  # worker stuck in eyes; move+say queued
+    assert client.started.wait(2)
+    pilot.handle_intent("STOP", now=1.0)
+    client.release.set()
+    rows = wait_rows(path, 2)
+    assert rows[0]["requested_intent"] == "ADVANCE" and rows[0]["bridge_ok"] == "0"
+    assert rows[0]["bridge_error"] == "cancelled by stop"
+    ac.close()
+    assert not any(c[0] == "move" for c in client.calls)
+    assert ("eyes", "red") not in client.calls
+    logger.close()
+
+
+def test_sync_clients_keep_working_unchanged():
+    client = FakeClient()
+    record = make_pilot(client, [("THUMBS_UP", 0.9)]).step(HAND, "Right", now=0.0)
+    assert record.decision.action == "ADVANCE" and ("move", 0.35, 0.0) in client.calls
+
+
+def test_capture_buffer_is_set_to_one_and_failures_are_ignored():
+    class Cv2:
+        CAP_PROP_BUFFERSIZE = 38
+
+    class Cap:
+        def __init__(self, fail=False):
+            self.fail, self.set_calls = fail, []
+
+        def set(self, prop, value):
+            self.set_calls.append((prop, value))
+            if self.fail:
+                raise RuntimeError("unsupported")
+
+    cap = Cap()
+    brain_main.configure_capture(Cv2, cap)
+    assert cap.set_calls == [(38, 1)]
+    brain_main.configure_capture(Cv2, Cap(fail=True))  # must not raise
+
+
+def test_wave_never_starts_any_audio():
+    played = []
+
+    class Boom:
+        def __getattr__(self, name):
+            played.append(name)
+            return lambda *a, **k: None
+
+    client = FakeClient()
+    pilot = Pilot(client, ScriptedPredictor([("NONE", 0.0)]), ContextDecider(None),
+                  sense_interval=None, music=Boom())
+    pilot.handle_intent("WAVE", now=0.0)
+    assert ("wave",) in client.calls and played == []
+    assert not hasattr(brain_main, "MusicPlayer")

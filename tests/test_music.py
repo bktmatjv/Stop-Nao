@@ -238,3 +238,91 @@ def test_dj_champions_plays_song_and_keeps_playlist_cursor(tmp_path, music_dir, 
     dj.stop()
     dj.play()
     assert dj.current_track == "a.mp3"  # stop resets the playlist cursor
+
+
+# ---------------------------------------------------------------------------
+# One audio source, one track at a time (real SoundBackend over a fake sounddevice).
+# ---------------------------------------------------------------------------
+import sys  # noqa: E402
+import time  # noqa: E402
+import types  # noqa: E402
+
+from brain.music import SoundBackend  # noqa: E402
+
+
+class FakeSoundDevice:
+    def __init__(self):
+        self.active = []
+        self.plays = []
+        self.overlaps = 0
+
+    def play(self, data, sr):
+        if self.active:  # real sounddevice would cut the old one; we want it halted BEFORE
+            self.overlaps += 1
+        self.active.append(data[0])
+        self.plays.append(data[0])
+
+    def stop(self):
+        self.active.clear()
+
+
+@pytest.fixture
+def fake_audio(monkeypatch):
+    sd = FakeSoundDevice()
+    sf = types.SimpleNamespace(read=lambda path, dtype=None: ([Path(path).name], 1))
+    monkeypatch.setitem(sys.modules, "sounddevice", sd)
+    monkeypatch.setitem(sys.modules, "soundfile", sf)
+    return sd
+
+
+def _wait(predicate, timeout=2.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.005)
+    return False
+
+
+def test_play_next_previous_never_leave_two_tracks_sounding(music_dir, fake_audio):
+    dj = DJPlayer(music_dir, backend=SoundBackend())
+    assert dj.play()
+    assert _wait(lambda: len(fake_audio.plays) == 1)
+    for step, expected in ((dj.next, 2), (dj.next, 3), (dj.previous, 4)):
+        assert step()
+        assert _wait(lambda: len(fake_audio.plays) == expected)
+        assert len(fake_audio.active) == 1
+    assert fake_audio.overlaps == 0
+    assert fake_audio.plays == ["a.mp3", "b.wav", "c.flac", "b.wav"]
+    dj.stop()
+    assert fake_audio.active == []
+
+
+def test_champions_replaces_the_current_track(tmp_path, music_dir, fake_audio):
+    champions = tmp_path / "champions.mp3"
+    champions.write_bytes(b"x")
+    dj = DJPlayer(music_dir, champions, backend=SoundBackend())
+    dj.play()
+    assert _wait(lambda: len(fake_audio.plays) == 1)
+    assert dj.play_champions()
+    assert _wait(lambda: len(fake_audio.plays) == 2)
+    assert fake_audio.active == ["champions.mp3"] and fake_audio.overlaps == 0
+
+
+def test_rapid_skips_leave_only_the_last_track(music_dir, fake_audio):
+    dj = DJPlayer(music_dir, backend=SoundBackend())
+    dj.play()
+    for _ in range(4):
+        dj.next()
+    time.sleep(0.2)
+    assert len(fake_audio.active) <= 1 and fake_audio.overlaps == 0
+
+
+def test_a_track_ending_never_starts_another(music_dir, fake_audio):
+    dj = DJPlayer(music_dir, backend=SoundBackend())
+    dj.play()
+    assert _wait(lambda: len(fake_audio.plays) == 1)
+    fake_audio.active.clear()  # the track finishes by itself
+    time.sleep(0.3)
+    assert fake_audio.plays == ["a.mp3"]  # no chaining, no random pick
+    assert dj.current_track == "a.mp3"
