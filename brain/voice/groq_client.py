@@ -8,6 +8,8 @@ import uuid
 
 from brain import vocab
 
+# Cloudflare (in front of Groq) answers 403 / error 1010 to urllib's default User-Agent.
+USER_AGENT = "nao-gesture-pilot/1.0"
 BASE_URL = "https://api.groq.com/openai/v1"
 STT_MODEL = "whisper-large-v3-turbo"
 LLM_MODEL = "openai/gpt-oss-20b"
@@ -50,7 +52,7 @@ class GroqClient:
         parts.append(f"--{boundary}--\r\n".encode())
         req = urllib.request.Request(
             f"{BASE_URL}/audio/transcriptions", data=b"".join(parts), method="POST",
-            headers={"Authorization": f"Bearer {self.api_key}",
+            headers={"Authorization": f"Bearer {self.api_key}", "User-Agent": USER_AGENT,
                      "Content-Type": f"multipart/form-data; boundary={boundary}"},
         )
         data = self._send(req)
@@ -80,7 +82,8 @@ class GroqClient:
         }
         req = urllib.request.Request(
             f"{BASE_URL}/chat/completions", data=json.dumps(body).encode(), method="POST",
-            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            headers={"Authorization": f"Bearer {self.api_key}", "User-Agent": USER_AGENT,
+                     "Content-Type": "application/json"},
         )
         data = self._send(req)
         try:

@@ -223,3 +223,14 @@ def test_soundevice_recorder_missing_dep_clear_error(monkeypatch):
     monkeypatch.setattr(builtins, "__import__", fake)
     with pytest.raises(RuntimeError, match="sounddevice"):
         SoundDeviceRecorder().start()
+
+
+def test_requests_send_custom_user_agent():
+    # Cloudflare in front of Groq rejects urllib's default User-Agent with HTTP 403 (error 1010).
+    calls = []
+    c = GroqClient("KEY", opener=make_opener([{"text": "hola"}, {"choices": [{"message": {"content": '{"intent": "STOP"}'}}]}], calls))
+    c.transcribe(b"RIFFwav")
+    c.classify("para")
+    for req, _ in calls:
+        ua = req.get_header("User-agent")
+        assert ua and not ua.lower().startswith("python-urllib")
