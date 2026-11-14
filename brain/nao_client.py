@@ -66,6 +66,7 @@ class NaoClient:
         except OSError as exc:
             raise NaoBridgeError("cannot launch bridge with %r: %s" % (python27, exc))
         self._lines = queue.Queue()
+        self._owed = 0  # replies a timed-out call is still waiting for (must not be mis-paired)
         self._stderr_tail = deque(maxlen=30)
         threading.Thread(target=self._pump_stdout, daemon=True).start()
         threading.Thread(target=self._pump_stderr, daemon=True).start()
@@ -88,9 +89,30 @@ class NaoClient:
 
     def _dead(self, why):
         tail = "\n".join(self._stderr_tail)
-        code = self._proc.poll()
-        return NaoBridgeError("NAO bridge %s (exit code %s). stderr tail:\n%s"
-                              % (why, code, tail))
+        try:  # the process may be exiting right now: give it a moment so the code is accurate
+            code = self._proc.wait(timeout=0.5)
+        except subprocess.TimeoutExpired:
+            code = None
+        state = "still running" if code is None else "exit code %s" % code
+        return NaoBridgeError("NAO bridge %s (%s). stderr tail:\n%s" % (why, state, tail))
+
+    def _drop_stale_replies(self):
+        """Discard replies owed to an earlier timed-out call.
+
+        Without this, a late answer would be read as the answer to the NEXT
+        command and every reply after it would belong to the wrong request.
+        """
+        while self._owed > 0:
+            try:
+                line = self._lines.get_nowait()
+            except queue.Empty:
+                return  # still not here; stay desynchronised-aware for the next call
+            if line is None:
+                self._lines.put(None)  # EOF sentinel stays for everyone
+                self._owed = 0
+                return
+            self._owed -= 1
+            self._stderr_tail.append("[late reply discarded] " + line.rstrip())
 
     def _write_line(self, line):
         try:
@@ -103,6 +125,7 @@ class NaoClient:
         try:
             line = self._lines.get(timeout=self.timeout)
         except queue.Empty:
+            self._owed += 1  # the reply may still arrive: never pair it with a later command
             raise self._dead("did not answer within %.1fs" % self.timeout)
         if line is None:
             self._lines.put(None)  # keep the sentinel for later calls
@@ -123,6 +146,7 @@ class NaoClient:
 
     def _call(self, **request):
         with self._lock:  # one request/response pair at a time
+            self._drop_stale_replies()
             self._write_line(json.dumps(request))
             for _ in range(self.MAX_NOISE_LINES):
                 line = self._read_line()

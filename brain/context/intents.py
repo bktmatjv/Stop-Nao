@@ -18,7 +18,7 @@ GESTURE_TO_INTENT = {
     "POINT_RIGHT": "TURN_RIGHT",
     "VICTORY": None,  # toggles the input source (handled by the Pilot); WAVE is voice-only now
     "FIST": "TOGGLE_POSTURE",
-    "TWO_FINGERS": "GREET",
+    "LOVE_YOU": None,  # celebration, handled by the Pilot outside the decider
     "NONE": None,
 }
 

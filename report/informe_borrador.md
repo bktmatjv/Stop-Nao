@@ -1,5 +1,5 @@
 <!--
-BORRADOR T4 (S6). Total de marcadores PENDIENTE (formato doble corchete): 95.
+BORRADOR. Marcadores PENDIENTE restantes (formato doble corchete): 57. Los ya resueltos provienen de `report/metrics/gesture_metrics.json`, de `report/figures/` y del código; los que quedan necesitan la sesión con el robot físico, la recolección del conjunto contextual o datos de la grabación.
 Todos los valores numéricos de resultados, figuras y pruebas con el robot están como marcadores y deben completarse
 desde report/metrics/*.json, report/figures/*.png y el protocolo de pruebas con el robot (T7/T8).
 Los umbrales de seguridad (0.30 m, 0.25 m, 0.20 m, 0.05 m, 0.785 rad, 0.6, 0.25) provienen de la especificación del proyecto, no de resultados.
@@ -45,13 +45,13 @@ Sin embargo, un robot que obedece a ciegas es inseguro. La orden "avanza" es cor
 
 **Objetivos específicos.**
 
-1. **OE1.** Construir un conjunto de datos propio de siete clases de gesto de mano, recolectado por los cuatro integrantes con la cámara de una computadora portátil, y entrenar y comparar dos algoritmos (Random Forest y Máquina de Vector Soporte) sobre atributos derivados de los puntos de referencia de la mano, evaluándolos con validación que separe a las personas.
+1. **OE1.** Construir un conjunto de datos propio de ocho clases de gesto de mano, recolectado por los integrantes del grupo con la cámara de una computadora portátil, y entrenar y comparar dos algoritmos (Random Forest y Máquina de Vector Soporte) sobre atributos derivados de los puntos de referencia de la mano, evaluándolos con validación que separe a las personas.
 2. **OE2.** Construir un conjunto de escenarios reales con el robot, etiquetados por humanos con la acción que el NAO debería ejecutar, y entrenar y comparar dos algoritmos (Árbol de Decisión y Random Forest) que decidan la acción en función del gesto, su confianza, los sonares, la cercanía de la mano y el estado del robot, contrastándolos con una política basada solo en reglas.
 3. **OE3.** Integrar ambos modelos con el NAO mediante un puente de comunicación entre Python 3 y Python 2.7, incorporando una capa de seguridad determinista, retroalimentación hablada y por color de ojos, y avance graduado, y verificar experimentalmente el comportamiento del robot.
 
 ### d. Alcance y limitaciones
 
-El alcance comprende siete clases de gesto (`THUMBS_UP`, `OPEN_PALM`, `POINT_LEFT`, `POINT_RIGHT`, `VICTORY`, `FIST` y `NONE`), reconocidas sobre una sola mano a la vez, ubicada aproximadamente entre 0.5 m y 1.5 m de la cámara de la computadora portátil, en un entorno interior de laboratorio. El cálculo se ejecuta en la computadora y no a bordo del NAO.
+El alcance comprende ocho clases de gesto (`THUMBS_UP`, `OPEN_PALM`, `POINT_LEFT`, `POINT_RIGHT`, `VICTORY`, `FIST`, `LOVE_YOU` y `NONE`), reconocidas sobre una o dos manos a la vez (la segunda mano solo se usa para el cambio de modo con dos pulgares arriba), ubicada aproximadamente entre 0.5 m y 1.5 m de la cámara de la computadora portátil, en un entorno interior de laboratorio. El cálculo se ejecuta en la computadora y no a bordo del NAO.
 
 Las principales limitaciones son: (i) se usa la cámara de la computadora portátil y no las del robot; (ii) los sonares del NAO solo cubren un cono frontal, por lo que no se detectan obstáculos laterales ni traseros; (iii) el robot no retrocede, pues sin sensor trasero un movimiento hacia atrás no podría validarse; (iv) el SDK de NAOqi requiere Python 2.7, lo que obliga a una arquitectura de dos procesos; y (v) los datos provienen de solo cuatro personas y de un acceso limitado al robot, por lo que la generalización debe interpretarse con cautela (Sección 5.b).
 
@@ -129,48 +129,65 @@ El sistema operativo es NAOqi OS, una distribución Linux sobre la cual corre el
 
 ### a. Descripción del problema
 
-El problema se descompone en dos tareas de aprendizaje supervisado encadenadas y una capa determinista. La primera es **clasificar el gesto** en una de siete clases a partir de los 21 puntos de la mano. La segunda es **decidir qué acción ejecuta el NAO** dados el gesto, su confianza, los sonares izquierdo y derecho, el tamaño de la mano como indicador de cercanía, y si el robot está en movimiento y de pie; la salida es una de catorce acciones, entre ellas conductas que ningún gesto ordena directamente (advertir de un obstáculo o de cercanía, exigir detenerse o ponerse de pie, avanzar solo una distancia corta o pedir confirmación). La tercera pieza es una **capa de seguridad** que valida la decisión con reglas explícitas y tiene la última palabra.
+El problema se descompone en dos tareas de aprendizaje supervisado encadenadas y una capa determinista. La primera es **clasificar el gesto** en una de ocho clases a partir de los 21 puntos de la mano. La segunda es **decidir qué acción ejecuta el NAO** dados el gesto, su confianza, los sonares izquierdo y derecho, el tamaño de la mano como indicador de cercanía, y si el robot está en movimiento y de pie; la salida es una de catorce acciones, entre ellas conductas que ningún gesto ordena directamente (advertir de un obstáculo o de cercanía, exigir detenerse o ponerse de pie, avanzar solo una distancia corta o pedir confirmación). La tercera pieza es una **capa de seguridad** que valida la decisión con reglas explícitas y tiene la última palabra.
 
-La siguiente tabla resume las clases de gesto, fijadas antes de la recolección para que los cuatro integrantes las realizaran de forma consistente.
+La siguiente tabla resume las clases de gesto, fijadas antes de la recolección para que los integrantes las realizaran de forma consistente. Las siete primeras se fijaron al inicio; `LOVE_YOU` se añadió en una segunda ronda de grabación (sección 3.h).
 
 | Clase | Descripción del gesto físico | Movimiento asociado |
 |---|---|---|
-| `THUMBS_UP` | [[PENDIENTE: describir el gesto acordado (pulgar hacia arriba, resto de dedos cerrados)]] | Avanzar 20 cm |
-| `OPEN_PALM` | [[PENDIENTE: describir el gesto acordado (palma abierta hacia la cámara)]] | Detenerse |
-| `POINT_LEFT` | [[PENDIENTE: describir el gesto acordado (índice señalando al lado izquierdo de la persona)]] | Girar |
-| `POINT_RIGHT` | [[PENDIENTE: describir el gesto acordado (índice señalando al lado derecho de la persona)]] | Girar |
-| `VICTORY` | [[PENDIENTE: describir el gesto acordado (índice y medio extendidos en V)]] | Alternar la entrada entre gestos y voz (sección 3.g) |
-| `FIST` | [[PENDIENTE: describir el gesto acordado (puño cerrado)]] | Sentarse o ponerse de pie (alterna) |
-| `NONE` | [[PENDIENTE: describir la mano en reposo, transiciones y posturas no reconocibles incluidas]] | Ninguna |
+| `THUMBS_UP` | Pulgar hacia arriba, el resto de la mano cerrada | Avanzar 35 cm |
+| `OPEN_PALM` | Palma abierta hacia la cámara, dedos separados | Detenerse (parada de emergencia) |
+| `POINT_LEFT` | Índice extendido señalando hacia la izquierda de la persona, resto cerrado | Girar 45° |
+| `POINT_RIGHT` | Índice extendido señalando hacia la derecha de la persona, resto cerrado | Girar 45° |
+| `VICTORY` | Índice y medio extendidos en V, separados entre sí; resto cerrado | Alternar la entrada entre gestos y voz (sección 3.g) |
+| `FIST` | Puño cerrado | Sentarse o ponerse de pie (alterna) |
+| `LOVE_YOU` | Pulgar, índice y meñique extendidos; medio y anular doblados | Celebrar: canción y baile (sección 3.g) |
+| `NONE` | Mano relajada, transiciones entre gestos y posturas no reconocibles | Ninguna |
 
 ### b. Origen y características del dataset
 
 Se utilizan dos conjuntos de datos propios, ambos recolectados por el grupo, sin conjuntos públicos.
 
-**Conjunto de gestos.** Los cuatro integrantes realizaron cada uno de los siete gestos frente a la cámara web de una computadora portátil. Cada fotograma pasó por MediaPipe Hands (solución `mp.solutions.hands`, una sola mano) y se guardó como una fila de un archivo CSV por persona, clase y marca de tiempo, con las columnas `person`, `label`, `handedness` y, para cada uno de los 21 puntos, las coordenadas `x`, `y` y `z`. Se solicitó variar la distancia a la cámara (dentro del rango de 0.5 a 1.5 m), la inclinación de la mano, la posición en el encuadre y la iluminación dentro de lo razonable para el laboratorio, y alternar manos izquierda y derecha cuando fuera posible. Tamaño del conjunto: [[PENDIENTE: número total de muestras, por persona y por clase (tabla de distribución)]]; condiciones de captura: [[PENDIENTE: resolución, tasa de cuadros, iluminación y distancia aproximada a la cámara]].
+**Conjunto de gestos.** Tres integrantes (Matías, Vanessa y Vivianne) realizaron cada uno de los ocho gestos frente a la cámara web de una computadora portátil. Cada fotograma pasó por MediaPipe Hands (solución `mp.solutions.hands`, una sola mano) y se guardó como una fila de un archivo CSV por persona, clase y marca de tiempo, con las columnas `person`, `label`, `handedness` y, para cada uno de los 21 puntos, las coordenadas `x`, `y` y `z`. Se solicitó variar la distancia a la cámara (dentro del rango de 0.5 a 1.5 m), la inclinación de la mano, la posición en el encuadre y la iluminación dentro de lo razonable para el laboratorio, y alternar manos izquierda y derecha cuando fuera posible. Tamaño del conjunto: **10 813 fotogramas** repartidos en 25 archivos CSV (una grabación de unos 15 s por persona y clase). La distribución es la siguiente.
 
-**Conjunto contextual.** Reúne escenarios reales con el robot (modelo Zyra) en los que se registran las variables de entrada y un integrante del grupo etiqueta, según su criterio, la acción que el robot debería ejecutar. Por ejemplo, ante el gesto `THUMBS_UP` con una caja a 20 cm del robot se etiqueta `WARN_OBSTACLE`, y con la caja a 40 cm se etiqueta `ADVANCE_SHORT`. El archivo `scenarios.csv` contiene las columnas `gesture`, `gesture_confidence`, `sonar_left`, `sonar_right`, `hand_size`, `moving`, `standing`, `action` y `scenario_id`. Las etiquetas las asignan personas; no se generan mediante reglas, para evitar que el modelo se limite a reproducir una función conocida. Tamaño: [[PENDIENTE: número de escenarios y distribución por acción]]; etiquetadores y criterio de etiquetado: [[PENDIENTE: quién etiquetó y con qué criterio común]].
+| Clase | Fotogramas | Persona | Fotogramas |
+|---|---|---|---|
+| `FIST` | 1 252 | Matías | 3 808 |
+| `LOVE_YOU` | 1 755 | Vanessa | 3 551 |
+| `NONE` | 1 188 | Vivianne | 3 454 |
+| `OPEN_PALM` | 1 336 | **Total** | **10 813** |
+| `POINT_LEFT` | 1 341 | | |
+| `POINT_RIGHT` | 1 350 | | |
+| `THUMBS_UP` | 1 255 | | |
+| `VICTORY` | 1 336 | | |
+| **Total** | **10 813** | | |
 
-**Aumento sintético (declarado).** [[PENDIENTE: confirmar si se usó aumento sintético. Si se usó: describir el procedimiento (por ejemplo, ruido gaussiano pequeño sobre las lecturas de sonar), cuántas muestras sintéticas se agregaron y confirmar que solo se emplearon en entrenamiento]]. Cualquier muestra sintética se identifica como tal, se reporta por separado y no se incluye jamás en los conjuntos de prueba; las métricas de la Sección 4 se calculan únicamente sobre datos reales.
+Las clases están razonablemente balanceadas (entre 1 188 y 1 755 fotogramas); `LOVE_YOU` tiene más porque Matías la grabó dos veces. La lateralidad que reporta MediaPipe sobre el fotograma sin espejar es `Left` en 8 369 filas y `Right` en 2 444; esa etiqueta no se usa como atributo (sección 3.c). Condiciones de captura: [[PENDIENTE: resolución y tasa de cuadros de la webcam, iluminación del laboratorio y distancia aproximada a la cámara]].
+
+**Conjunto contextual.** Reúne escenarios reales con el robot (modelo Zyra) en los que se registran las variables de entrada y un integrante del grupo etiqueta, según su criterio, la acción que el robot debería ejecutar. Por ejemplo, ante el gesto `THUMBS_UP` con una caja a 20 cm del robot se etiqueta `WARN_OBSTACLE`, y con la caja a 40 cm se etiqueta `ADVANCE_SHORT`. El archivo `scenarios.csv` contiene las columnas `gesture`, `gesture_confidence`, `sonar_left`, `sonar_right`, `hand_size`, `moving`, `standing`, `action` y `scenario_id`. Las etiquetas las asignan personas; no se generan mediante reglas, para evitar que el modelo se limite a reproducir una función conocida. Tamaño: [[PENDIENTE: este conjunto aún no se ha recolectado; sin él no existe `models/context_model.joblib` y el sistema opera con las reglas por gesto más la capa de seguridad]]; etiquetadores y criterio de etiquetado: [[PENDIENTE: quién etiquetó y con qué criterio común]].
+
+**Aumento sintético (declarado).** El modelo de gestos se entrenó **sin ningún dato sintético**: las 10 813 filas provienen de grabaciones reales del equipo. Para el modelo contextual existe un generador declarado (`brain/context/make_synthetic.py`) que muestrea valores de sonar y tamaño de mano de distribuciones realistas, los etiqueta con una política de referencia distinta de la capa de seguridad e inyecta ruido de etiqueta para simular el desacuerdo entre operadores; cada fila queda marcada con `source=synthetic`. Al no haberse recolectado todavía el conjunto contextual real, ese generador no se ha empleado en ningún modelo entregado. Cualquier muestra sintética se identifica como tal, se reporta por separado y no se incluye jamás en los conjuntos de prueba; las métricas de la Sección 4 se calculan únicamente sobre datos reales.
 
 ### c. Preprocesamiento
 
 - **Valores faltantes e invarianza.** Si MediaPipe no detecta una mano, `extract_features` devuelve `None` y la ausencia equivale a `NONE` con confianza cero; las lecturas de sonar no positivas o no numéricas se tratan como inválidas y, por seguridad, como no seguras. Las coordenadas se expresan relativas a la muñeca y se dividen entre el tamaño de la mano.
-- **Lateralidad.** La lateralidad detectada se incorpora como atributo o se usa para reflejar la mano izquierda sobre la derecha, de modo que los gestos de señalamiento conserven su significado con cualquiera de las dos manos [[PENDIENTE: confirmar cuál de las dos estrategias implementa features.py]].
+- **Lateralidad.** No se usa ninguna de las dos estrategias habituales: la etiqueta `Left`/`Right` de MediaPipe **no se incorpora como atributo ni se emplea para reflejar la mano**. En las primeras grabaciones reales del equipo esa etiqueta resultó poco fiable: la misma mano física se etiquetaba `Right` solo mientras señalaba a la derecha y `Left` en todos los demás gestos, de modo que un modelo que la usara aprendía un atajo que se rompe en cuanto la etiqueta cambia. Las coordenadas se mantienen en la orientación original de la imagen y la forma de la mano se describe con atributos invariantes al espejo (extensión y flexión de cada dedo, distancias entre yemas, apertura y `thumb_up_score`). Como contrapartida, las coordenadas sí difieren entre manos, por lo que cada integrante graba con la mano que usará en la demostración.
 - **Estandarización.** Los atributos se estandarizan con `StandardScaler` (media cero, varianza unitaria) para el SVM, cuyo núcleo es sensible a la escala; los árboles no la requieren. El escalador forma parte de un `Pipeline` y se ajusta solo con los datos de entrenamiento de cada partición, lo que evita filtrar información de la partición de prueba.
 - **Codificación de variables.** En el modelo contextual, el gesto, categórico, se codifica en *one-hot*; `moving` y `standing` se representan como 0/1; la variable objetivo es la acción.
-- **Limpieza.** [[PENDIENTE: filas eliminadas por ausencia de mano, duplicados o lecturas de sonar inválidas, con conteos]].
+- **Limpieza.** De los 10 813 fotogramas no se descartó ninguno: `extract_features` no devolvió `None` en ningún caso (ningún valor no finito, ninguna palma colapsada ni lateralidad desconocida) y ninguna fila quedó por debajo del umbral de mano lejana (`MIN_HAND_SIZE = 0.05` del ancho del encuadre). Los conteos los emite el propio script de entrenamiento y quedan registrados en `report/metrics/gesture_metrics.json`, clave `preprocessing`.
 
 ### d. División de datos
 
 Una división aleatoria de filas sería inapropiada: los fotogramas consecutivos de una misma persona y gesto son casi idénticos, de modo que una fila de prueba tendría una gemela casi exacta en el entrenamiento y la métrica sería optimista por fuga de información. Por ello se emplea validación cruzada con `GroupKFold`:
 
-- **Gestos:** los grupos son las personas. Con cuatro integrantes, cada partición reserva a una persona completa para prueba y entrena con las otras tres, lo que mide la generalización a una persona no vista, el escenario real de uso.
+- **Gestos:** los grupos son las personas. Con tres integrantes, una persona completa (Vivianne, 3 454 fotogramas) se reserva como conjunto de prueba y nunca participa en el ajuste; las otras dos (7 359 fotogramas) se usan para la búsqueda de hiperparámetros con `GroupKFold`. Así se mide la generalización a una persona no vista, que es el escenario real de uso.
 - **Contexto:** los grupos son los escenarios (`scenario_id`), de modo que ninguna variante de un mismo escenario aparezca a la vez en entrenamiento y prueba.
 
-Esquema exacto de evaluación (validación anidada con ajuste interno, o conjunto de prueba reservado): [[PENDIENTE: confirmar según el código de entrenamiento de brain/gestures y brain/context]]. Se reporta la media y la desviación estándar de las métricas entre particiones.
+Esquema exacto de evaluación: **conjunto de prueba reservado por persona, con ajuste interno por validación cruzada de grupos**. `brain/gestures/train.py` reserva a una persona completa, ejecuta `GridSearchCV` con `GroupKFold` sobre las personas restantes, elige el mejor modelo **por la puntuación de validación cruzada y nunca por la de prueba**, y recién entonces lo evalúa una sola vez sobre la persona reservada. Se reportan la media y la desviación estándar del F1 macro entre particiones de validación, además de las métricas sobre la persona reservada.
 
-**Nota de versión.** Las métricas de esta sección corresponden a las siete clases originales. La clase `LOVE_YOU` se añadió después y se evaluará en la sección 3.h con el mismo esquema.
+Una limitación honesta de este esquema con tres personas: al reservar una, quedan solo dos grupos para la validación interna, de modo que `GroupKFold` opera con **dos particiones** y cada una entrena con una sola persona. Esto hace que la puntuación de validación cruzada sea baja y ruidosa comparada con la de prueba (Sección 4.a), y es la principal razón para grabar a más personas (Sección 5).
+
+**Nota de versión.** Las métricas de este informe corresponden a las ocho clases, `LOVE_YOU` incluida: el modelo se reentrenó con el conjunto completo tras la segunda ronda de grabación.
 
 ### e. Entrenamiento y ajuste de hiperparámetros
 
@@ -178,12 +195,12 @@ Cada algoritmo se ajusta con `GridSearchCV` (Pedregosa et al., 2011) usando la v
 
 | Modelo | Algoritmo | Hiperparámetros explorados | Valores |
 |---|---|---|---|
-| Gestos | Random Forest | `n_estimators`, `max_depth`, `min_samples_leaf`, `max_features` | [[PENDIENTE: rejilla exacta]] |
-| Gestos | SVM (RBF) | `C`, `gamma`, con probabilidades calibradas | [[PENDIENTE: rejilla exacta]] |
-| Contexto | Árbol de Decisión | `max_depth`, `min_samples_leaf`, `criterion` | [[PENDIENTE: rejilla exacta]] |
-| Contexto | Random Forest | `n_estimators`, `max_depth`, `min_samples_leaf` | [[PENDIENTE: rejilla exacta]] |
+| Gestos | Random Forest | `n_estimators`, `max_depth`, `min_samples_leaf` | `[100, 200, 300]` × `[None, 10, 20]` × `[1, 2, 4]` (27 combinaciones) |
+| Gestos | SVM (RBF) | `C`, `gamma`, con probabilidades calibradas | `[0.1, 1, 10, 100]` × `["scale", 0.01, 0.1, 1]` (16 combinaciones) |
+| Contexto | Árbol de Decisión | `max_depth`, `min_samples_leaf`, `criterion` | `[3, 5, 8, None]` × `[1, 3, 5]` × `["gini", "entropy"]` (24 combinaciones) |
+| Contexto | Random Forest | `n_estimators`, `max_depth`, `min_samples_leaf` | `[100, 200]` × `[None, 6, 10]` × `[1, 3]` (12 combinaciones) |
 
-Las métricas reportadas son exactitud (*accuracy*), F1 macro, matriz de confusión y, para diagnosticar sobreajuste y suficiencia de datos, la curva de aprendizaje del mejor modelo de gestos. La semilla aleatoria es fija para que los experimentos sean reproducibles. Los modelos finales se serializan en `models/gesture_model.joblib` y en un archivo equivalente para el modelo contextual.
+Las métricas reportadas son exactitud (*accuracy*), F1 macro, matriz de confusión y, para diagnosticar sobreajuste y suficiencia de datos, la curva de aprendizaje del mejor modelo de gestos. La semilla aleatoria es fija (`--seed 42`) para que los experimentos sean reproducibles. Las probabilidades del SVM se calibran con `CalibratedClassifierCV`, porque la confianza del gesto no es solo un número informativo: es la entrada del umbral `MIN_CONF = 0.6` que decide si el robot actúa o pide repetir el gesto. Los modelos finales se serializan en `models/gesture_model.joblib` y en un archivo equivalente para el modelo contextual.
 
 ### f. Estrategia de integración con el NAO
 
@@ -232,7 +249,7 @@ La semántica de señalamiento merece una aclaración. Se decidió que el robot 
 
 | Acción propuesta | Condición exigida | Si no se cumple | Umbral |
 |---|---|---|---|
-| Avanzar | Sonares frontales libres | Avance reducido o rechazo | `SAFE_FRONT` = 0.30 m; paso de 0.20 m; mínimo de 0.05 m |
+| Avanzar | Sonares frontales libres | Avance reducido o rechazo | `SAFE_FRONT` = 0.30 m; `ADVANCE_STEP` = 0.35 m; `MIN_STEP` = 0.05 m |
 | Girar | Sonar del lado hacia el que se gira, libre | Rechazo con aviso de obstáculo | `SAFE_SIDE` = 0.25 m |
 | Saludar | De pie, sin movimiento, persona no demasiado cerca | Aviso de que debe detenerse o aviso de cercanía | `TOO_CLOSE_HAND` = 0.25 (tamaño de mano) |
 | Sentarse o pararse | Robot sin movimiento | Aviso de que debe detenerse primero | n. a. |
@@ -241,7 +258,7 @@ La semántica de señalamiento merece una aclaración. Se decidió que el robot 
 
 Una lectura de sonar inválida (menor o igual que cero, o no numérica) se trata como insegura. Por la ausencia de un sensor trasero, el repertorio no incluye movimiento hacia atrás.
 
-**Avance graduado.** Cuando el obstáculo está cerca pero más allá del margen de seguridad, el robot no se limita a aceptar o rechazar: avanza únicamente la distancia segura. Si la lectura frontal mínima es $d$, la distancia que puede avanzar es $\min(d - \text{SAFE\_FRONT},\ \text{ADVANCE\_STEP})$ [[PENDIENTE: verificar en safety.py la fórmula exacta del avance parcial]]. Si esa distancia es menor que `MIN_STEP`, el movimiento se rechaza. Con una caja a 20 cm el robot rechaza el avance; con la caja a 40 cm avanza una distancia de unos 10 cm y lo comunica.
+**Avance graduado.** Cuando el obstáculo está cerca pero más allá del margen de seguridad, el robot no se limita a aceptar o rechazar: avanza únicamente la distancia segura. Si la lectura frontal mínima es $d$, la distancia que puede avanzar es $\min(d - \text{SAFE\_FRONT},\ \text{ADVANCE\_STEP})$ donde $d = \min(\text{sonar}_\text{izq}, \text{sonar}_\text{der})$. La fórmula se verificó contra `brain/context/safety.py`: si $d <$ `SAFE_FRONT` se rechaza; si $d <$ `SAFE_FRONT` $+$ `ADVANCE_STEP` el paso es exactamente $d -$ `SAFE_FRONT`; en otro caso es el paso completo. Si el paso resultante es menor que `MIN_STEP`, el movimiento se rechaza. Con una caja a 20 cm el robot rechaza el avance; con la caja a 40 cm avanza 10 cm y lo comunica.
 
 **Retroalimentación.** El color de los ojos comunica el estado: verde cuando la orden se acepta, amarillo cuando es dudosa o está limitada (por ejemplo, un avance parcial), rojo cuando se rechaza por seguridad y azul cuando espera una orden. Cada rechazo o limitación se acompaña de una explicación hablada, por ejemplo "Hay una caja delante, no puedo avanzar", y de la misma razón en pantalla. Si la confianza es menor que el umbral, el robot pide repetir el gesto en lugar de actuar.
 
@@ -249,7 +266,7 @@ Una lectura de sonar inválida (menor o igual que cero, o no numérica) se trata
 
 $$\hat{y}_t = \arg\max_{c} \sum_{k=t-T+1}^{t} \mathbb{1}\left[ \hat{y}_k = c \right]$$
 
-junto con su confianza. Para que un gesto sostenido no dispare órdenes continuas, tras ejecutar una acción se aplica un periodo de espera (*cooldown*) de [[PENDIENTE: segundos, según brain/main.py]] antes de aceptar otra orden. Estos mecanismos introducen una latencia deliberada a cambio de estabilidad, cuyo efecto se mide en la Sección 4.c.
+junto con su confianza. Para que un gesto sostenido no dispare órdenes continuas, tras ejecutar una acción se aplica un periodo de espera (*cooldown*) de **2.5 s** (`DEFAULT_COOLDOWN`, ajustable con `--cooldown`) antes de aceptar otra orden. Un gesto sostenido se ejecuta una sola vez: debe desaparecer y volver a aparecer. La parada de emergencia `OPEN_PALM` es la excepción y no respeta ni la espera ni el umbral de confianza. Estos mecanismos introducen una latencia deliberada a cambio de estabilidad, cuyo efecto se mide en la Sección 4.c.
 
 ### g. Arquitectura multimodal: gestos y voz, con dos modos
 
@@ -259,9 +276,17 @@ Dos controles funcionan en cualquier combinación, para que el usuario nunca que
 
 ### h. Riesgo de confusión entre LOVE_YOU y VICTORY
 
-`LOVE_YOU` (pulgar, índice y meñique extendidos) y `VICTORY` (índice y medio extendidos) comparten el gesto de dedos extendidos y pueden confundirse. `LOVE_YOU` se agregó después de las siete clases originales, por lo que su error se medirá con muestras grabadas por Matías y Vivianne. La métrica se calcula en `brain/gestures/train.py` y se guarda en `report/metrics/gesture_metrics.json`, clave `love_you_victory_confusion`, con las tasas `love_you_as_victory` y `victory_as_love_you`: [[PENDIENTE: valores tras la grabación de LOVE_YOU y el reentrenamiento]].
+`LOVE_YOU` (pulgar, índice y meñique extendidos) y `VICTORY` (índice y medio extendidos) comparten el gesto de dedos extendidos y pueden confundirse. `LOVE_YOU` se agregó después de las siete clases originales y se grabó con los tres integrantes. La métrica se calcula en `brain/gestures/train.py` y se guarda en `report/metrics/gesture_metrics.json`, clave `love_you_victory_confusion`. Sobre la persona reservada (Vivianne, 449 fotogramas de cada clase) el modelo seleccionado (SVM RBF) obtiene:
 
-Mitigación: la opción `--confirm-ambiguous` pide repetir el gesto antes de actuar con cualquiera de los dos. Está desactivada por defecto. Si el error medido resulta alto, la confirmación se activa en la demostración; esa decisión depende del valor medido [[PENDIENTE: decisión del equipo tras la métrica]].
+| Confusión medida | Tasa |
+|---|---|
+| `VICTORY` clasificado como `LOVE_YOU` | **0.423** |
+| `LOVE_YOU` clasificado como `VICTORY` | 0.022 |
+| Tasa conjunta sobre ambas clases | 0.223 |
+
+El error es marcadamente asimétrico: `LOVE_YOU` se reconoce casi siempre (exhaustividad 0.978), mientras que **más de cuatro de cada diez fotogramas de `VICTORY` se leen como `LOVE_YOU`** (exhaustividad 0.548). La explicación es geométrica: ambos gestos presentan dedos extendidos y separados, y el atributo que los distingue —si el meñique está extendido y el medio doblado, o al revés— es justo el que más varía entre personas. Como `VICTORY` es el control que alterna gestos y voz, el error se traduce en que el robot celebra cuando se le pedía cambiar de canal.
+
+Mitigación: la opción `--confirm-ambiguous` pide repetir el gesto antes de actuar con cualquiera de los dos. **A la vista de la tasa medida, el equipo la dejó activada por defecto** (`--no-confirm-ambiguous` la desactiva). La confirmación no elimina el sesgo, porque un error sistemático puede repetirse en la segunda lectura, pero evita que un único fotograma mal clasificado dispare una celebración, y el robot anuncia en voz alta qué entendió antes de actuar. La solución de fondo es grabar más muestras de `VICTORY` con más personas (Sección 5).
 
 ### i. Uso de Groq para la entrada por voz
 
@@ -271,18 +296,35 @@ Al pulsar `v` en entrada VOZ, el audio se graba y se envía a Groq con el modelo
 
 ## 4. Resultados
 
-> Todos los valores de esta sección se completarán a partir de `report/metrics/*.json`, de los archivos de `report/figures/` y del protocolo de pruebas con el robot. No se incluye ningún dato hasta que provenga de una ejecución real.
+> Los valores del reconocimiento de gestos provienen de `report/metrics/gesture_metrics.json` y de las figuras de `report/figures/`, generados por `python -m brain.gestures.train --data data/gestures --refit-all`. Los valores del modelo contextual y de las pruebas con el robot siguen marcados como pendientes: no se incluye ningún dato que no provenga de una ejecución real.
 
 ### a. Métricas
 
 **Reconocimiento de gestos (Random Forest frente a SVM).** Evaluación con `GroupKFold` por persona (Sección 3.d). Se reportan la media y la desviación estándar entre particiones.
 
-| Modelo | Hiperparámetros óptimos | Accuracy (media ± d.e.) | F1 macro (media ± d.e.) |
-|---|---|---|---|
-| Random Forest | [[PENDIENTE: mejores hiperparámetros del RF de gestos]] | [[PENDIENTE: accuracy RF]] | [[PENDIENTE: F1 macro RF]] |
-| SVM (RBF) | [[PENDIENTE: mejores C y gamma]] | [[PENDIENTE: accuracy SVM]] | [[PENDIENTE: F1 macro SVM]] |
+| Modelo | Hiperparámetros óptimos | F1 macro en validación (media ± d.e.) | Accuracy en la persona reservada | F1 macro en la persona reservada |
+|---|---|---|---|---|
+| Random Forest | `n_estimators`=100, `max_depth`=None, `min_samples_leaf`=2 | 0.615 ± 0.041 | 0.952 | 0.953 |
+| SVM (RBF) | `C`=0.1, `gamma`=0.01 | **0.640 ± 0.014** | 0.938 | 0.937 |
 
-Precisión, exhaustividad y F1 por clase de ambos modelos: [[PENDIENTE: tabla por clase para RF y SVM]].
+El modelo final se elige por la puntuación de validación cruzada, nunca por la de prueba: gana el SVM por 0.640 frente a 0.615. Conviene señalar que **sobre la persona reservada el orden se invierte** (Random Forest 0.953 frente a 0.937 de F1 macro). Con solo dos grupos de validación interna (Sección 3.d) la diferencia de 0.025 en validación cae dentro del ruido del procedimiento, de modo que ambos algoritmos deben considerarse equivalentes con los datos disponibles. El SVM se mantiene además por su coste de inferencia: 0.96 ms por fotograma frente a los milisegundos del bosque, lo que importa en un ciclo de cámara en tiempo real.
+
+Precisión, exhaustividad y F1 por clase sobre la persona reservada:
+
+| Clase | Soporte | RF prec. | RF exh. | RF F1 | SVM prec. | SVM exh. | SVM F1 |
+|---|---|---|---|---|---|---|---|
+| `FIST` | 449 | 0.987 | 1.000 | 0.993 | 0.996 | 1.000 | 0.998 |
+| `LOVE_YOU` | 449 | 0.843 | 0.811 | 0.826 | 0.698 | 0.978 | 0.814 |
+| `NONE` | 310 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
+| `OPEN_PALM` | 449 | 1.000 | 1.000 | 1.000 | 0.972 | 1.000 | 0.986 |
+| `POINT_LEFT` | 450 | 0.987 | 1.000 | 0.993 | 1.000 | 1.000 | 1.000 |
+| `POINT_RIGHT` | 449 | 0.993 | 1.000 | 0.997 | 1.000 | 1.000 | 1.000 |
+| `THUMBS_UP` | 449 | 1.000 | 0.973 | 0.986 | 1.000 | 0.996 | 0.998 |
+| `VICTORY` | 449 | 0.819 | 0.844 | 0.831 | 0.961 | **0.548** | 0.698 |
+
+Seis de las ocho clases se reconocen de forma prácticamente perfecta con ambos algoritmos. **Todo el error del sistema se concentra en el par `LOVE_YOU` / `VICTORY`** (Sección 3.h). Es importante para la lectura de la tabla: la exactitud global de 0.94 no describe un sistema uniformemente bueno, sino uno casi perfecto en seis clases y claramente deficiente en una.
+
+**Nota sobre el modelo entregado.** Las métricas de esta tabla describen el modelo ajustado solo con las dos personas de entrenamiento, que es la única forma honesta de medir la generalización. El archivo `models/gesture_model.joblib` que se ejecuta en la demostración se reentrenó después con los mismos hiperparámetros sobre **las tres personas** (`--refit-all`, registrado en la clave `split.refit_all` del JSON de métricas), de modo que el modelo desplegado conoce a los tres integrantes que aparecen en el video.
 
 **Decisión contextual (Árbol de Decisión, Random Forest y política de solo reglas).** Evaluación con `GroupKFold` por escenario. La política de solo reglas no se entrena y se evalúa sobre los mismos escenarios.
 
@@ -292,29 +334,29 @@ Precisión, exhaustividad y F1 por clase de ambos modelos: [[PENDIENTE: tabla po
 | Random Forest | [[PENDIENTE: n_estimators, max_depth y min_samples_leaf óptimos]] | [[PENDIENTE: accuracy RF]] | [[PENDIENTE: F1 macro RF]] |
 | Política de solo reglas | no aplica | [[PENDIENTE: accuracy de las reglas]] | [[PENDIENTE: F1 macro de las reglas]] |
 
-**Capa de seguridad.** La regla de seguridad se verificó con casos de prueba con lecturas por debajo y por encima de los umbrales, incluidos casos exactamente en el umbral. Resultado: [[PENDIENTE: número de casos probados y cuántos cumplieron la regla]]. Número de escenarios en los que la capa de seguridad modificó la decisión del modelo aprendido: [[PENDIENTE: conteo]].
+**Capa de seguridad.** La regla de seguridad se verificó con una batería automatizada (`tests/test_context.py`) con lecturas por debajo, por encima y exactamente en cada umbral, además de lecturas inválidas (cero, negativas, `NaN` y `None`). Resultado: **53 casos ejecutados, 53 conformes** (`python -m pytest tests/test_context.py`). La suite completa del proyecto suma 308 pruebas en verde. Número de escenarios en los que la capa de seguridad modificó la decisión del modelo aprendido: [[PENDIENTE: conteo]].
 
 ### b. Gráficas
 
-**Figura 1.** Matriz de confusión del Random Forest de gestos (`report/figures/gesture_cm_rf.png`).
+![Matriz de confusión del Random Forest de gestos](figures/gesture_cm_rf.png)
 
-[[PENDIENTE: insertar gesture_cm_rf.png y leyenda con el conjunto sobre el que se calculó]]
+**Figura 1.** Matriz de confusión del Random Forest de gestos, calculada sobre los 3 454 fotogramas de la persona reservada (Vivianne), que no participó en el entrenamiento. Las seis clases ajenas al par ambiguo quedan prácticamente en la diagonal; fuera de ella destacan 84 fotogramas de `LOVE_YOU` leídos como `VICTORY` y 68 de `VICTORY` leídos como `LOVE_YOU`.
 
-**Figura 2.** Matriz de confusión del SVM de gestos (`report/figures/gesture_cm_svm.png`).
+![Matriz de confusión del SVM de gestos](figures/gesture_cm_svm.png)
 
-[[PENDIENTE: insertar gesture_cm_svm.png]]
+**Figura 2.** Matriz de confusión del SVM (RBF), mismo conjunto. El error se concentra aún más: 190 de los 449 fotogramas de `VICTORY` se clasifican como `LOVE_YOU`, mientras que el sentido contrario casi desaparece (10 fotogramas). El SVM es más exacto en conjunto, pero concentra su error en una sola clase.
 
-**Figura 3.** Curva de aprendizaje del mejor modelo de gestos (`report/figures/gesture_learning_curve.png`).
+![Curva de aprendizaje](figures/gesture_learning_curve.png)
 
-[[PENDIENTE: insertar gesture_learning_curve.png]]
+**Figura 3.** Curva de aprendizaje del modelo seleccionado, con F1 macro frente al número de fotogramas de entrenamiento. La curva de entrenamiento se mantiene cerca de 1.0 mientras la de validación por grupos desciende de 0.71 a 0.64 al añadir fotogramas: la brecha no se cierra. Esto indica que **el límite no es la cantidad de fotogramas sino la cantidad de personas**; añadir más fotogramas de las mismas dos personas no mejora la generalización a una tercera.
 
-**Figura 4.** Comparación de modelos de gestos (`report/figures/gesture_model_comparison.png`).
+![Comparación de modelos](figures/gesture_model_comparison.png)
 
-[[PENDIENTE: insertar gesture_model_comparison.png]]
+**Figura 4.** Comparación de Random Forest y SVM en validación cruzada por grupos y sobre la persona reservada. Ilustra la inversión comentada en la Sección 4.a: el SVM gana en validación y el Random Forest en la persona reservada.
 
 **Figura 5.** Matriz de confusión del Árbol de Decisión contextual (`report/figures/context_cm_dt.png`).
 
-[[PENDIENTE: insertar context_cm_dt.png]]
+[[PENDIENTE: el modelo contextual no se ha entrenado todavía; esta figura se genera con `python -m brain.context.train` una vez recolectado `data/context/scenarios.csv`]]
 
 **Figura 6.** Matriz de confusión del Random Forest contextual (`report/figures/context_cm_rf.png`).
 
@@ -334,15 +376,16 @@ Se definió un protocolo de pruebas en el que cada escenario se repite 10 veces 
 
 | Escenario | Gesto | Condición del entorno | Comportamiento esperado | Rep. | Éxitos | Latencia media (s) |
 |---|---|---|---|---|---|---|
-| E1 | `THUMBS_UP` | Camino libre | Avanza 20 cm, ojos verdes | 10 | [[PENDIENTE: éxitos]] | [[PENDIENTE: latencia]] |
+| E1 | `THUMBS_UP` | Camino libre | Avanza 35 cm, ojos verdes | 10 | [[PENDIENTE: éxitos]] | [[PENDIENTE: latencia]] |
 | E2 | `THUMBS_UP` | Caja a 20 cm | Rechaza, explica el obstáculo, ojos rojos | 10 | [[PENDIENTE: éxitos]] | [[PENDIENTE: latencia]] |
 | E3 | `THUMBS_UP` | Caja a 40 cm | Avance parcial, ojos amarillos | 10 | [[PENDIENTE: éxitos]] | [[PENDIENTE: latencia]] |
 | E4 | `POINT_LEFT` / `POINT_RIGHT` | Obstáculo del lado hacia el que apunta | Rechaza el giro y lo explica | 10 | [[PENDIENTE: éxitos]] | [[PENDIENTE: latencia]] |
 | E5 | `POINT_LEFT` / `POINT_RIGHT` | Lado libre | Gira 45° hacia lo señalado | 10 | [[PENDIENTE: éxitos]] | [[PENDIENTE: latencia]] |
-| E6 | `VICTORY` | Persona muy cerca | Rechaza el saludo y avisa de la cercanía | 10 | [[PENDIENTE: éxitos]] | [[PENDIENTE: latencia]] |
+| E6 | Voz: "salúdame" | Persona muy cerca | Rechaza el saludo y avisa de la cercanía | 10 | [[PENDIENTE: éxitos]] | [[PENDIENTE: latencia]] |
 | E7 | `OPEN_PALM` | Robot en movimiento | Se detiene | 10 | [[PENDIENTE: éxitos]] | [[PENDIENTE: latencia]] |
 | E8 | `FIST` | Robot en movimiento | Pide detenerse antes de sentarse | 10 | [[PENDIENTE: éxitos]] | [[PENDIENTE: latencia]] |
-| E9 | Gesto ambiguo | Confianza baja | Pide confirmación, no actúa | 10 | [[PENDIENTE: éxitos]] | [[PENDIENTE: latencia]] |
+| E9 | `VICTORY` o `LOVE_YOU` | Confirmación activada | Pide repetir el gesto antes de actuar | 10 |
+| E10 | `LOVE_YOU` | Robot sentado | Suena la canción, anuncia que no puede bailar sentado | 10 | [[PENDIENTE: éxitos]] | [[PENDIENTE: latencia]] | [[PENDIENTE: éxitos]] | [[PENDIENTE: latencia]] |
 
 Descripción cualitativa del comportamiento (fluidez, falsos disparos, efecto de la iluminación, estabilidad de la conexión): [[PENDIENTE: observaciones de las pruebas con el robot Zyra]]. Plataforma de las pruebas: [[PENDIENTE: indicar qué escenarios se probaron en robot físico y cuáles en simulador]].
 
@@ -364,9 +407,9 @@ Se comparan tres configuraciones del decisor contextual: solo reglas, Árbol de 
 
 La interpretación se basará estrictamente en los valores de la Sección 4. Las pautas siguientes indican cómo se leerá cada resultado.
 
-- **Gestos, Random Forest frente a SVM.** Si el SVM supera al Random Forest, sería coherente con que los atributos normalizados forman fronteras suaves en las que el núcleo RBF es efectivo; si el Random Forest es igual o superior, bastarían umbrales sobre extensión de dedos y ángulos. La diferencia debe contrastarse con la desviación estándar entre personas: si es menor que ella, no puede afirmarse superioridad. Resultado: [[PENDIENTE: interpretación de la comparación con las cifras de la Sección 4.a]].
-- **Errores entre clases.** Confusiones entre `POINT_LEFT` y `POINT_RIGHT` indicarían sensibilidad a la lateralidad; entre `FIST` y `THUMBS_UP`, que el pulgar es difícil de distinguir con la mano cerrada; y entre `NONE` y cualquier gesto, que la mano en reposo se parece a una orden. Confusiones observadas: [[PENDIENTE: pares de clases más confundidos según las matrices de confusión]].
-- **Curva de aprendizaje.** Si las curvas convergen a un valor alto, el modelo está limitado por sesgo y más datos aportarían poco; si persiste una brecha, hay sobreajuste y más personas ayudarían. Observación: [[PENDIENTE: interpretación de la curva de aprendizaje]].
+- **Gestos, Random Forest frente a SVM.** No puede afirmarse superioridad de ninguno. El SVM gana en validación cruzada (0.640 ± 0.014 frente a 0.615 ± 0.041) pero pierde sobre la persona reservada (F1 macro 0.937 frente a 0.953), y la diferencia en validación, 0.025, es del orden de la desviación estándar del Random Forest. Con solo dos grupos de validación, el procedimiento no tiene potencia para distinguirlos: la conclusión honesta es que ambos resuelven igual de bien las seis clases separables y fallan igual en el par ambiguo, por lo que la elección se decide por el coste de inferencia (0.96 ms por fotograma en el SVM) y no por la exactitud.
+- **Errores entre clases.** Ninguna de las confusiones previstas apareció. `POINT_LEFT` y `POINT_RIGHT` no se confunden nunca (F1 de 1.000 con el SVM), lo que valida los atributos de dirección absoluta `index_dir_x/y`; `FIST` y `THUMBS_UP` se separan casi perfectamente gracias a `thumb_up_score`; y `NONE` se reconoce sin un solo error, pese a ser la clase más heterogénea. **El único par confundido es `LOVE_YOU` / `VICTORY`**, con 190 de 449 fotogramas de `VICTORY` leídos como `LOVE_YOU`. Es un error de diseño del vocabulario de gestos más que del clasificador: se eligieron dos señas que comparten la configuración de dedos extendidos y separados.
+- **Curva de aprendizaje.** Persiste una brecha amplia y, además, la validación **empeora** al añadir fotogramas (de 0.71 con 710 fotogramas a 0.64 con 3 551), mientras el entrenamiento se mantiene junto a 1.0. El modelo memoriza las particularidades de las manos que ve en lugar de aprender la forma del gesto. La conclusión práctica es directa: más fotogramas de las mismas personas no ayudan; lo que hace falta son **más personas**.
 - **Contexto, Árbol frente a Random Forest y reglas.** Si el Random Forest supera al árbol, la diferencia se atribuye a la menor varianza del conjunto; si son similares, es preferible el árbol por interpretabilidad. Si el modelo aprendido no supera a la política de solo reglas, su valor residiría en los casos que las reglas no cubren; si la supera, en que captura criterios humanos de los etiquetadores. Resultado: [[PENDIENTE: interpretación con la Sección 4.a y las Figuras 7 y 8]].
 - **Capa de seguridad y robot real.** Si el modelo ya evitaba avanzar contra obstáculos, la regla es una red de seguridad redundante; si hubo casos en que la corrigió, una garantía determinista no puede sustituirse por un modelo entrenado con pocos escenarios. La brecha entre las métricas sobre datos grabados y el éxito en el robot (Sección 4.c) cuantifica el efecto de condiciones no vistas. Observación: [[PENDIENTE: interpretar intervenciones, éxito y latencia, incluidos el avance parcial y la petición de confirmación]].
 
@@ -376,7 +419,8 @@ La interpretación se basará estrictamente en los valores de la Sección 4. Las
 - **Cámara del portátil y una sola mano.** El sistema solo reconoce una mano entre 0.5 m y 1.5 m de la cámara del portátil; si la persona sale del encuadre, el robot no puede reaccionar, y la iluminación deficiente degrada la detección.
 - **Cobertura del sonar.** Los sonares cubren solo un cono frontal, tienen una distancia mínima y pueden dar lecturas falsas por reflejos o superficies inclinadas o absorbentes; la capa de seguridad es tan fiable como esa lectura.
 - **Sin movimiento hacia atrás.** El robot carece de sensor trasero, por lo que ante un obstáculo solo puede negarse o girar.
-- **Conjunto de datos pequeño y latencia.** Cuatro personas y pocos escenarios limitan la generalización, y con cuatro grupos la validación por persona tiene alta varianza. Latencia de red observada: [[PENDIENTE: valores medidos y variabilidad]].
+- **Conjunto de datos pequeño.** Tres personas limitan la generalización: al reservar una, la validación interna queda con dos grupos y una varianza alta (Sección 3.d). El conjunto contextual todavía no se ha recolectado, por lo que el sistema opera con las reglas por gesto más la capa de seguridad y la comparación de la Sección 4.d queda pendiente.
+- **Latencia observada.** Sobre las 252 decisiones registradas en `runs/`, la latencia mediana de extremo a extremo (gesto estable → confirmación del puente) es de **217 ms**, con percentil 90 de 595 ms, para todas las acciones salvo los cambios de postura. Sentarse y levantarse eran la excepción grave: medianas de **20.0 s** y **13.3 s** y máximos de 30 s, y una parada de emergencia llegó a tardar 33.7 s porque quedó encolada detrás de una. La causa era que `goToPosture` se llamaba de forma bloqueante en un puente de un solo hilo; se corrigió lanzándola de forma asíncrona, como el resto de órdenes, y las mediciones deben repetirse tras la corrección.
 
 ### c. Propuestas de mejora
 
@@ -390,11 +434,11 @@ La interpretación se basará estrictamente en los valores de la Sección 4. Las
 
 ## 6. Conclusiones
 
-1. **Sobre el reconocimiento de gestos (OE1).** [[PENDIENTE: el algoritmo (RF o SVM) obtuvo el mejor F1 macro, de __ ± __ con GroupKFold por persona, frente a __ ± __ del otro; la diferencia es / no es mayor que la desviación entre personas, por lo que se concluye que ...]]. La clase con peor desempeño fue [[PENDIENTE: clase]] (F1 = [[PENDIENTE: valor]]), lo que indica [[PENDIENTE: causa probable según la matriz de confusión]].
+1. **Sobre el reconocimiento de gestos (OE1).** El SVM con núcleo RBF obtuvo el mejor F1 macro en validación cruzada por persona, 0.640 ± 0.014 frente a 0.615 ± 0.041 del Random Forest; la diferencia no supera la desviación entre particiones, por lo que **no se concluye superioridad de ningún algoritmo**: con los datos disponibles ambos son equivalentes y la elección se justifica por el coste de inferencia. La clase con peor desempeño fue `VICTORY` (F1 = 0.698, exhaustividad 0.548 sobre una persona no vista), y la matriz de confusión muestra que su error es casi en su totalidad hacia `LOVE_YOU`: la causa no es el clasificador sino la elección de dos gestos geométricamente vecinos, que debería revisarse antes que el modelo.
 2. **Sobre la decisión contextual (OE2).** [[PENDIENTE: el modelo (DT o RF) alcanzó un F1 macro de __ frente a __ del otro y a __ de la política de solo reglas, y los atributos más influyentes fueron __, lo que confirma / contradice la expectativa de que los sonares y la cercanía de la mano determinan la acción]]. Con [[PENDIENTE: n]] escenarios reales, el resultado es [[PENDIENTE: valoración sobre si el tamaño de los datos fue suficiente]].
 3. **Sobre la integración y la seguridad (OE3).** [[PENDIENTE: el robot ejecutó el comportamiento esperado en __ de 10 repeticiones en promedio, con latencia media de __ s; con la caja a 20 cm la capa de seguridad evitó el avance en __ de 10 intentos y con la caja a 40 cm el avance parcial se produjo en __ de 10]]. Esto indica que [[PENDIENTE: juicio sobre si la combinación de modelo aprendido, regla determinista, explicación y confirmación es adecuada para un robot que comparte espacio con personas]].
 4. **Sobre el enfoque "razonar antes de obedecer".** [[PENDIENTE: valoración de si las explicaciones habladas y la petición de confirmación en gestos ambiguos redujeron los movimientos indebidos, con base en el escenario de gesto ambiguo]].
-5. **Sobre la arquitectura.** El puente persistente en Python 2.7 con protocolo JSON permitió usar MediaPipe en Python 3 y el SDK de NAOqi en Python 2.7 simultáneamente; el costo observado fue una latencia adicional de [[PENDIENTE: ms del viaje de ida y vuelta del puente]], aceptable / no aceptable para [[PENDIENTE: el tipo de órdenes del sistema]].
+5. **Sobre la arquitectura.** El puente persistente en Python 2.7 con protocolo JSON permitió usar MediaPipe en Python 3 y el SDK de NAOqi en Python 2.7 simultáneamente, con una latencia mediana de extremo a extremo de 217 ms, aceptable para órdenes discretas como avanzar, girar o detenerse, donde el periodo de espera de 2.5 s entre órdenes domina la interacción. La lección de ingeniería fue que un puente de un solo hilo exige que **toda** orden sea no bloqueante: la única que no lo era, el cambio de postura, degradó la latencia mediana a 20 s y llegó a retrasar una parada de emergencia hasta 33.7 s, un comportamiento inaceptable en un robot que comparte espacio con personas.
 
 ---
 

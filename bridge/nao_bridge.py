@@ -16,7 +16,8 @@ Protocol:
            "Sit", "Crouch", "Unknown", ...)
     {"cmd":"move","x":f,"theta":f}
         -> {"ok":true,"x":f,"theta":f,"clamped":bool}   NON-blocking moveTo(x, 0, theta)
-           x is clamped to [0, 0.30] m and theta to [-1.6, 1.6] rad. Refused
+           x is clamped to [0, MAX_X] m (0.40, i.e. the 0.35 full advance of the
+           safety layer plus margin) and theta to [-1.6, 1.6] rad. Refused
            (ok:false) unless the posture is Stand, StandInit or StandZero.
     {"cmd":"stop"}
         -> {"ok":true}   stops moveTo, animation/dance and speech; clears animating
@@ -32,7 +33,9 @@ Protocol:
     {"cmd":"blink"}                -> {"ok":true}   quick eye flash, colour restored
     {"cmd":"ear_leds","on":bool}   -> {"ok":true}
     {"cmd":"posture","name":"Sit"|"StandInit"}
-        -> {"ok":true}                goToPosture(name, 0.6); refused while moving
+        -> {"ok":true}                NON-blocking goToPosture(name, 0.6); refused
+           while moving or while another posture change is still in flight.
+           sense.animating is true until the transition ends.
     {"cmd":"say","text":"..."}                 -> {"ok":true}   non-blocking (utf-8, Spanish)
     {"cmd":"eyes","color":"green|yellow|red|blue|purple|white|..."}  -> {"ok":true}
     {"cmd":"set_mock","sonar_left"?,"sonar_right"?,"posture"?,"moving"?}
@@ -403,6 +406,11 @@ class MockRobot(object):
     def is_moving(self):
         return self.moving
 
+    @property
+    def posture_busy(self):
+        """The mock reaches the posture instantly, so it is never in transition."""
+        return False
+
     def move_to(self, x, theta):
         duration = x / MOCK_LINEAR + abs(theta) / MOCK_ANGULAR
         self._move_until = time.time() + duration
@@ -511,6 +519,7 @@ class NaoRobot(object):
         self.ears = False
         self._motion_task = None
         self._speech_task = None
+        self._posture_task = None
 
         # Same start-up as the professor's nao_show.py. Nothing is disabled.
         self.motion.stiffnessInterpolation("Body", 1.0, 1.0)
@@ -538,15 +547,22 @@ class NaoRobot(object):
             return False
 
     @property
+    def posture_busy(self):
+        """True while a goToPosture transition started by this bridge is still running."""
+        return self._running(self.posture, self._posture_task)
+
+    @property
     def animating(self):
         return (self._running(self.motion, self._motion_task)
-                or self._running(self.tts, self._speech_task))
+                or self._running(self.tts, self._speech_task)
+                or self.posture_busy)
 
     def stop(self):
-        """Interrupt moveTo, animations and speech; every step is attempted."""
+        """Interrupt moveTo, animations, posture changes and speech; every step is attempted."""
         failures = []
         for what, call in (("stopMove", lambda: self.motion.stopMove()),
                            ("killAll", lambda: self.motion.killAll()),
+                           ("posture.stopMove", lambda: self.posture.stopMove()),
                            ("tts.stopAll", lambda: self.tts.stopAll() if self.tts else None)):
             try:
                 call()
@@ -555,11 +571,23 @@ class NaoRobot(object):
                 failures.append("%s: %s: %s" % (what, type(exc).__name__, exc))
         self._motion_task = None
         self._speech_task = None
+        self._posture_task = None
         if failures:
             raise RequestError("stop incomplete: " + "; ".join(failures))
 
     def go_posture(self, name, speed):
-        return bool(self.posture.goToPosture(str(name), speed))
+        """Start the posture change WITHOUT blocking.
+
+        goToPosture takes several seconds. The bridge is a single
+        request/response pipe served by one thread, so calling it blocking
+        stalls every other command behind it (stop, sense, eyes) and can trip
+        the client's read timeout. Like move/say/dance, the transition is
+        posted and tracked; ``posture_busy`` reports it and ``stop`` cancels
+        it. Success is therefore observed through ``sense()["posture"]``, not
+        through a return value.
+        """
+        self._posture_task = self.posture.post.goToPosture(str(name), speed)
+        return True
 
     def say(self, text):
         if self.tts is None:
@@ -658,6 +686,13 @@ def _require_standing(robot, what):
                            % (what, posture, "/".join(STANDING_POSTURES)))
 
 
+def _require_settled(robot, what):
+    """Refuse while a posture change is still in flight (getPosture lies mid-transition)."""
+    if getattr(robot, "posture_busy", False):
+        raise RequestError("cannot %s while the robot is changing posture; "
+                           "wait for it to settle or stop first" % what)
+
+
 def _clamp(value, lo, hi):
     return max(lo, min(hi, value))
 
@@ -665,6 +700,7 @@ def _clamp(value, lo, hi):
 def cmd_move(robot, req):
     x = _require_number(req, "x")
     theta = _require_number(req, "theta")
+    _require_settled(robot, "move")
     _require_standing(robot, "move")
     cx = _clamp(x, 0.0, MAX_X)
     ct = _clamp(theta, -MAX_THETA, MAX_THETA)
@@ -688,6 +724,7 @@ def _run_animation(robot, what, joints, build, need_standing=True):
     """Shared path of wave/dance/greet: checks, limits, validation, start (non-blocking)."""
     if robot.is_moving():
         raise RequestError("cannot %s while moving; stop first" % what)
+    _require_settled(robot, what)
     if need_standing:
         _require_standing(robot, what)
     names = sorted(joints)
@@ -727,8 +764,9 @@ def cmd_posture(robot, req):
         raise RequestError("posture must be one of %s" % ", ".join(ALLOWED_POSTURES))
     if robot.is_moving():
         raise RequestError("cannot change posture while moving; stop first")
+    _require_settled(robot, "change posture")
     if not robot.go_posture(str(name), POSTURE_SPEED):
-        raise RequestError("goToPosture(%s) returned False" % name)
+        raise RequestError("goToPosture(%s) could not be started" % name)
     return {"ok": True}
 
 

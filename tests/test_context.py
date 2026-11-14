@@ -40,7 +40,7 @@ def ctx(**over):
 
 # ------------------------------------------------------------- contract
 def test_contract_constants():
-    assert GESTURES == ("THUMBS_UP", "OPEN_PALM", "POINT_LEFT", "POINT_RIGHT", "VICTORY", "FIST", "TWO_FINGERS", "NONE")
+    assert GESTURES == ("THUMBS_UP", "OPEN_PALM", "POINT_LEFT", "POINT_RIGHT", "VICTORY", "FIST", "LOVE_YOU", "NONE")
     assert FEATURE_COLUMNS == ("gesture", "gesture_confidence", "sonar_left", "sonar_right",
                                "hand_size", "moving", "standing")
     assert SCENARIO_COLUMNS == (*FEATURE_COLUMNS, "action", "scenario_id")

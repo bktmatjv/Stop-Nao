@@ -75,8 +75,6 @@ def _mean_spec(label: str) -> dict:
         return _spec(_THUMB_TUCKED, [_EXT, _EXT, _CURL, _CURL], _SPREAD_V, 0.0)
     if label == "FIST":
         return _spec(_THUMB_TUCKED, [_CURL] * 4, _SPREAD_REST, 0.0)
-    if label == "TWO_FINGERS":
-        return _spec(_THUMB_TUCKED, [_EXT, _EXT, _CURL, _CURL], _SPREAD_REST, 0.0)
     if label == "LOVE_YOU":  # thumb + index + pinky out, middle and ring curled
         return _spec(_THUMB_OUT, [_EXT, _CURL, _CURL, _EXT], _SPREAD_WIDE, 0.0)
     raise ValueError(label)

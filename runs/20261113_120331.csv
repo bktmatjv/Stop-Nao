@@ -1,0 +1,8 @@
+timestamp,gesture,confidence,sonar_left,sonar_right,hand_size,moving,standing,requested_intent,action,params,reason,eye_color,overridden,bridge_ok,simulated,latency_ms,mode,input,bridge_error
+2026-11-13T12:03:37.078,OPEN_PALM,0.780,0.570,0.420,0.090,0,1,STOP,STOP,{},Me detengo.,blue,0,1,0,0.1,MOVEMENT,GESTURES,
+2026-11-13T12:03:37.883,OPEN_PALM,0.778,0.590,0.440,0.066,0,1,STOP,STOP,{},Me detengo.,blue,0,1,0,0.1,MOVEMENT,GESTURES,
+2026-11-13T12:05:16.264,POINT_LEFT,0.942,0.480,0.540,0.110,0,1,TURN_RIGHT,TURN_RIGHT,"{""theta"": -0.785}",Giro a la derecha.,cyan,0,1,0,234.1,MOVEMENT,GESTURES,
+2026-11-13T12:08:35.712,OPEN_PALM,0.779,0.500,0.470,0.110,0,1,STOP,STOP,{},Me detengo.,blue,0,1,0,0.1,MOVEMENT,GESTURES,
+2026-11-13T12:08:37.446,OPEN_PALM,0.779,0.540,0.520,0.095,0,1,STOP,STOP,{},Me detengo.,blue,0,1,0,0.1,MOVEMENT,GESTURES,
+2026-11-13T12:08:47.738,THUMBS_UP,0.903,0.640,0.490,0.131,0,1,ADVANCE,ADVANCE_SHORT,"{""x"": 0.19}",Solo puedo avanzar 19 centímetros.,yellow,1,1,0,235.1,MOVEMENT,GESTURES,
+2026-11-13T12:08:49.092,OPEN_PALM,0.778,0.540,0.590,0.023,1,1,STOP,STOP,{},Me detengo.,blue,0,1,0,0.1,MOVEMENT,GESTURES,

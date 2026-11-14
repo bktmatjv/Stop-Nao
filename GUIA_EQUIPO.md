@@ -194,23 +194,38 @@ Cada rol tiene pasos numerados que se siguen en orden. Los roles pueden intercam
 3. Grabar el video siguiendo `report/guion_video.md`. Duración objetivo: 4 minutos (rango de 3 a 5).
 4. Revisar que las cifras del informe y del video coincidan con los archivos de métricas finales.
 
-## 6b. Checklist del equipo: música y voz
+## 6b. Checklist del equipo
 
-Tareas pendientes antes de la demo. Cada una la hace una persona del equipo; marcar cuando esté lista.
+Estado al 13/11/2026. Marcar cuando esté lista.
 
-- [ ] **Grabar `LOVE_YOU`** con Matías y con Vivianne, usando la mano de la demo (desde `.venv311`):
+### Hecho
+
+- [x] **Grabar `LOVE_YOU`** con los tres integrantes (Matías, Vanessa y Vivianne). También se regrabó `VICTORY` de Vanessa y Vivianne.
+- [x] **Reentrenar el modelo de gestos** con las tres personas. Con tres o más personas el script cambia solo al protocolo honesto: `GroupKFold` por persona más una persona reservada para prueba. Resultado: 10 813 fotogramas, 8 clases, F1 macro de 0.937 sobre la persona reservada.
+- [x] **Reentrenar para la demo** con `--refit-all`, para que el modelo desplegado conozca a los tres integrantes:
   ```powershell
-  .venv311\Scripts\python.exe -m brain.gestures.capture --person <identificador> --label LOVE_YOU --seconds 15 --camera 0
+  python -m brain.gestures.train --data data/gestures --out models/gesture_model.joblib --refit-all
   ```
-  Las muestras van a `data/gestures`. El identificador no puede tener espacios ni guiones bajos.
-- [ ] **Reentrenar el modelo de gestos**, porque el modelo actual no conoce `LOVE_YOU`:
+- [x] **Medir la confusión `LOVE_YOU` / `VICTORY`**: el 42 % de los fotogramas de `VICTORY` se leen como `LOVE_YOU` en una persona no vista. Por eso `--confirm-ambiguous` quedó **activada por defecto**.
+
+### Pendiente
+
+- [ ] **Sesión con el robot físico (Zyra).** Es el 35 % de la nota y todavía no hay ninguna: las 19 ejecuciones de `runs/` son contra Choregraphe (`127.0.0.1`). Guardar el CSV de esa sesión como evidencia.
   ```powershell
-  python -m brain.gestures.train --data data/gestures --out models/gesture_model.joblib
+  python -m brain.main --robot zyra
   ```
-  Luego revisar la clave `love_you_victory_confusion` de `report/metrics/gesture_metrics.json`. Ese dato va al informe.
+- [ ] **Recolectar el conjunto contextual** y entrenar el segundo modelo. Sin él no existe `models/context_model.joblib` y el sistema funciona solo con reglas más la capa de seguridad. Unos 40 escenarios bastan:
+  ```powershell
+  python -m brain.context.collect --scenario-id <id> --robot zyra
+  python -m brain.context.train --data data/context/scenarios.csv --out models/context_model.joblib
+  ```
+  Si no se alcanza a recolectar, hay que quitar la promesa del modelo contextual del README y del informe, y presentar la capa de seguridad como lo que es: reglas deterministas.
+- [ ] **Grabar a más personas** para `VICTORY` y `LOVE_YOU`. La curva de aprendizaje muestra que más fotogramas de las mismas personas no mejoran nada; hacen falta más manos distintas.
 - [ ] **Copiar las canciones**: "We Are the Champions" en el archivo de `CHAMPIONS_SONG`, y las canciones de DJ en la carpeta de `MUSIC_DIR` (`.wav` o `.mp3`). Las dos rutas se definen en `.env`. Los audios no se suben al repositorio.
 - [ ] **Crear la clave de Groq** y ponerla en `GROQ_API_KEY` del `.env`. El archivo `.env` no se sube al repositorio.
 - [ ] **Probar la red del laboratorio**: confirmar que no bloquea `api.groq.com`. Si bloquea, la voz funciona solo con el respaldo por palabras clave.
+- [ ] **Completar el informe.** Quedan 31 marcadores `[[PENDIENTE]]`; los resueltos ya traen las métricas reales. Los que faltan necesitan la sesión con el robot, el modelo contextual, las condiciones de grabación y las referencias.
+- [ ] **Grabar el video** (3 a 5 minutos) siguiendo `report/guion_video.md`.
 
 Configuración inicial del `.env` (una vez por computador):
 

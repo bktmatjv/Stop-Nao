@@ -207,16 +207,10 @@ class Executor:
             send(self.client.move(float(params["x"]), 0.0))
         elif action in ("TURN_LEFT", "TURN_RIGHT"):
             send(self.client.move(0.0, float(params["theta"])))
-        elif action in ("WAVE", "DANCE"):
-            if hasattr(self.client, "dance"):
-                send(self.client.dance())
-            else:
-                send(self.client.wave())
-        elif action == "GREET":
-            if hasattr(self.client, "greet"):
-                send(self.client.greet())
-            else:
-                send(self.client.wave())
+        elif action == "WAVE":  # "salúdame": the arm wave, not the dance
+            send(self.client.wave())
+        elif action == "DANCE":
+            send(self.client.dance())
         elif action == "SIT":
             send(self.client.posture("Sit"))
         elif action == "STAND":
@@ -376,20 +370,29 @@ def _call(client, name: str, *args):
 
 
 class DanceLoop:
-    """Cycles ``dance(loop_a..loop_d)`` while active; driven by ``tick(now)``, never sleeps."""
+    """Cycles ``dance(loop_a..loop_d)`` while active; driven by ``tick(now)``, never sleeps.
+
+    ``can_dance`` (optional) is checked before every step: the bridge refuses to
+    dance unless the robot is standing and still, so asking anyway would only
+    produce a bridge error, red eyes and "no pude ejecutar la orden".
+    """
 
     STYLES = ("loop_a", "loop_b", "loop_c", "loop_d")
 
-    def __init__(self, client, interval: float = DANCE_INTERVAL, styles=STYLES):
+    def __init__(self, client, interval: float = DANCE_INTERVAL, styles=STYLES, can_dance=None):
         self.client = client
         self.interval = interval
         self.styles = tuple(styles)
+        self.can_dance = can_dance
         self.active = False
         self._index = 0
         self._next_at = 0.0
 
+    def allowed(self) -> bool:
+        return self.can_dance is None or bool(self.can_dance())
+
     def start(self, now: float) -> None:
-        if self.active:
+        if self.active or not self.allowed():
             return
         self.active = True
         self._index = 0
@@ -398,6 +401,9 @@ class DanceLoop:
 
     def tick(self, now: float) -> None:
         if not self.active or now < self._next_at:
+            return
+        if not self.allowed():  # the robot sat down or started walking mid-song
+            self.stop(send_stop=False)
             return
         self._index = (self._index + 1) % len(self.styles)
         _call(self.client, "dance", self.styles[self._index])
@@ -461,7 +467,7 @@ class Pilot:
         self.logger = logger
         self.sense_interval = sense_interval
         self.dj = dj
-        self.dance = DanceLoop(client, dance_interval)
+        self.dance = DanceLoop(client, dance_interval, can_dance=self._can_dance)
         self.voice = voice
         self.confirm_ambiguous = confirm_ambiguous
         self.blink_interval = blink_interval
@@ -520,6 +526,17 @@ class Pilot:
             return
         if self._last_sense_t is None or now - self._last_sense_t >= self.sense_interval:
             self._read_sense(now)
+
+    def _can_dance(self) -> bool:
+        """The bridge only dances when the robot is standing and still (see ``_run_animation``).
+
+        With no reading yet the bridge decides; otherwise asking while sitting
+        just produces an error response and red eyes.
+        """
+        sense = self.sense
+        if sense is None:
+            return True
+        return is_standing(sense.get("posture")) and not bool(sense.get("moving"))
 
     def _bridge_error(self) -> str:
         error = getattr(self.client, "last_error", None)
@@ -663,7 +680,8 @@ class Pilot:
         spoken = False
         if intent == vocab.STOP:
             self.emergency_stop()
-            text = "Me detengo."
+            _call(self.client, "eyes", self.eye_color)  # visible return to the idle colour
+            text, spoken = "Me detengo.", True
         elif intent == vocab.CELEBRATE:
             text, spoken = self._celebrate(now), True
         elif intent == vocab.MUSIC_PLAY:
@@ -716,10 +734,17 @@ class Pilot:
         return "¡Música!"
 
     def _celebrate(self, now: float) -> str:
-        """We Are the Champions + special dance; the dance loop gives way to it."""
+        """We Are the Champions + special dance; the dance loop gives way to it.
+
+        Sitting or walking, the song still plays but the dance is skipped: the
+        bridge would refuse it and the robot would answer with an error instead
+        of a celebration.
+        """
         self.dance.stop()  # sends stop so the champions dance does not overlap a loop step
         if self.dj is not None:
             self.dj.play_champions()
+        if not self._can_dance():
+            return "¡Somos los campeones! Ponme de pie y bailo."
         _call(self.client, "dance", "champions")
         return "¡Somos los campeones!"
 
@@ -767,7 +792,10 @@ class Pilot:
         voice_only = self.input_mode == vocab.INPUT_VOICE
         if voice_only and label not in vocab.ALWAYS_ACTIVE_GESTURES:
             return None
-        if palm and (self.mode == vocab.MODE_MUSIC or voice_only):
+        if palm:
+            # S: the e-stop never goes through the learned model. Routing it through the
+            # decider would make "detente" depend on a prediction (and on the confidence
+            # gate, which answers ASK_CONFIRM instead of stopping). It always stops.
             self._acted, self._last_fire = label, now
             return self.handle_intent(vocab.STOP, now, conf, label, size)
         if not confirming and not palm and (label == self._acted
@@ -1204,9 +1232,11 @@ def build_parser(config: Config | None = None) -> argparse.ArgumentParser:
     p.add_argument("--champions-song", default=config.champions_song or None,
                    help="audio file played by the celebrate gesture/intent (default: "
                         "CHAMPIONS_SONG from .env)")
-    p.add_argument("--confirm-ambiguous", action="store_true",
-                   help="ask for a repeat before acting on LOVE_YOU or VICTORY (often confused "
-                        "with each other; default off)")
+    p.add_argument("--confirm-ambiguous", action=argparse.BooleanOptionalAction, default=True,
+                   help="ask for a repeat before acting on LOVE_YOU or VICTORY. ON by default: "
+                        "on the held-out person 42%% of the VICTORY frames are read as LOVE_YOU "
+                        "(report/metrics/gesture_metrics.json, love_you_victory_confusion). "
+                        "Use --no-confirm-ambiguous to act on the first reading")
     p.add_argument("--no-voice", action="store_true",
                    help="do not build the push-to-talk voice listener (GROQ_API_KEY; without a "
                         "key only the keyword fallback exists)")

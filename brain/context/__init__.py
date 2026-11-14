@@ -19,7 +19,7 @@ GESTURES = (
     "POINT_RIGHT",
     "VICTORY",
     "FIST",
-    "TWO_FINGERS",
+    "LOVE_YOU",
     "NONE",
 )
 ACTIONS = (

@@ -339,8 +339,9 @@ def test_play_without_tracks_does_not_dance():
     assert c.dances() == [] and not p.dance.active
 
 
-def test_movement_gesture_in_music_mode_never_moves_the_robot():
-    c, p = make([("TWO_FINGERS", 0.95)], dj=DJ())
+def test_gesture_without_meaning_in_music_mode_never_moves_the_robot():
+    """A label the MUSIC table does not map resolves to UNKNOWN: no robot command at all."""
+    c, p = make([("UNMAPPED", 0.95)], dj=DJ())
     p.set_mode(vocab.MODE_MUSIC, 0.0)
     c.calls.clear()
     p.step(HAND, "Right", now=5.0)
@@ -374,8 +375,15 @@ def test_confirm_ambiguous_on_asks_then_executes_on_repeat(label):
 
 def test_confirm_ambiguous_off_acts_immediately():
     dj = DJ()
-    _, p = make([("LOVE_YOU", 0.95)], dj=dj)
+    _, p = make([("LOVE_YOU", 0.95)], dj=dj, confirm_ambiguous=False)
     assert p.step(HAND, "Right", now=0.0).decision.action == "CELEBRATE"
+
+
+def test_confirm_ambiguous_is_on_by_default_in_the_cli():
+    """LOVE_YOU <-> VICTORY confusion is measured high, so the CLI asks for a repeat."""
+    assert brain_main.build_parser().parse_args(["--mock"]).confirm_ambiguous is True
+    assert brain_main.build_parser().parse_args(
+        ["--mock", "--no-confirm-ambiguous"]).confirm_ambiguous is False
 
 
 def test_confirm_ambiguous_does_not_ask_for_other_gestures():
