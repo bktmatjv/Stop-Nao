@@ -35,7 +35,6 @@ INSTRUCTIONS = {
     "POINT_RIGHT": "POINT_RIGHT = senala con el indice hacia TU derecha.",
     "VICTORY": "VICTORY     = dos dedos en V (indice y medio), el resto cerrado.",
     "FIST": "FIST        = puno cerrado.",
-    "TWO_FINGERS": "TWO_FINGERS = indice y medio juntos y rectos, apuntando al frente (saludo).",
     "LOVE_YOU": "LOVE_YOU    = pulgar, indice y menique extendidos; medio y anular doblados.",
     "NONE": "NONE        = mano relajada / movimientos naturales / sin gesto.",
 }

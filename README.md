@@ -86,7 +86,7 @@ Controles que funcionan siempre, en cualquier modo y entrada:
 
 **Voz.** `wave` (saludar) ya no está asociado a ningún gesto: se pide por voz con la frase "salúdame". En modo VOZ, la tecla `v` de la vista previa inicia y detiene la grabación (ver [Teclas](#ejecución-del-sistema)); la transcripción se convierte en una intención de la lista cerrada `vocab.VOICE_INTENTS`. Si el servicio de Groq falla, se usa un respaldo por palabras clave.
 
-**Riesgo de confusión.** `LOVE_YOU` y `VICTORY` pueden confundirse entre sí. Con `--confirm-ambiguous` el robot pide repetir antes de actuar con cualquiera de los dos.
+**Riesgo de confusión.** `LOVE_YOU` y `VICTORY` se confunden entre sí: sobre la persona reservada para prueba, el **42 % de los fotogramas de `VICTORY` se clasifican como `LOVE_YOU`** (`report/metrics/gesture_metrics.json`, clave `love_you_victory_confusion`). Por eso la confirmación está **activada por defecto**: el robot pide repetir antes de actuar con cualquiera de los dos. Se desactiva con `--no-confirm-ambiguous`.
 
 **Señalar.** La persona mira al robot, así que el robot gira *hacia donde señala la persona*. Su izquierda es la derecha del robot: `POINT_LEFT` hace girar al robot a su derecha. Esto lo controla la constante `POINT_TURNS_TOWARD_POINTED_SIDE = True`.
 
@@ -108,6 +108,7 @@ Controles que funcionan siempre, en cualquier modo y entrada:
 | Azul | Modo MOVIMIENTO (en espera) |
 | Morado | Modo MÚSICA |
 | Cian | Giro a la izquierda o a la derecha |
+| Magenta | Saludo (`WAVE`, por voz) |
 | Blanco | Cambio de postura (sentarse o ponerse de pie) |
 
 Los LED de las orejas se encienden cuando la entrada es VOZ.
@@ -246,7 +247,7 @@ El sistema necesita `models/gesture_model.joblib`. Si no existe, termina con có
 | `--virtual-sonar` | | Solo con Choregraphe en `127.0.0.1`: simula los sonares (ver abajo) |
 | `--music-dir` | `MUSIC_DIR` de `.env`, o `songs` | Carpeta con las canciones del modo MÚSICA |
 | `--champions-song` | `CHAMPIONS_SONG` de `.env` | Audio que suena con el gesto `LOVE_YOU` |
-| `--confirm-ambiguous` | desactivado | Pide repetir antes de actuar con `LOVE_YOU` o `VICTORY` (suelen confundirse) |
+| `--confirm-ambiguous` / `--no-confirm-ambiguous` | activado | Pide repetir antes de actuar con `LOVE_YOU` o `VICTORY` (42 % de confusión medida) |
 | `--no-voice` | desactivado | No crea el escucha de voz (sin clave de Groq, solo queda el respaldo por palabras clave) |
 
 **Qué ocurre.** Cuando aparece un gesto estable nuevo y pasó el tiempo de espera, el robot lee sus sensores, el modelo de contexto y la capa de seguridad deciden, y el robot se mueve, cambia el color de sus ojos y dice el motivo. Un gesto sostenido se ejecuta una sola vez. `NONE` nunca actúa. Si la confianza es baja, el robot pide repetir el gesto: si se repite con confianza de al menos 0.6 dentro de `--confirm-window`, se ejecuta aunque no haya pasado la espera entre órdenes. Si no, la petición caduca y los ojos vuelven a azul.
@@ -276,8 +277,8 @@ El sistema necesita `models/gesture_model.joblib`. Si no existe, termina con có
 - La capa de seguridad tiene la última palabra. Ninguna salida del modelo puede saltársela.
 - Umbrales fijos: distancia segura al frente 0.30 m, distancia segura al costado 0.25 m, avance completo 0.35 m, avance mínimo 0.05 m, giro de 0.785 rad (45°).
 - Las lecturas de sonar inválidas (cero, negativas o NaN) se tratan como inseguras.
-- Los comandos de movimiento están limitados: `0 <= x <= 0.30` m y `|theta| <= 1.6` rad. No se mueve si el robot no está de pie.
-- `OPEN_PALM` (detener) siempre está permitido.
+- Los comandos de movimiento están limitados en el puente: `0 <= x <= 0.40` m y `|theta| <= 1.6` rad (el avance completo que pide la capa de seguridad es 0.35 m). No se mueve si el robot no está de pie ni mientras cambia de postura.
+- `OPEN_PALM` (detener) siempre está permitido y **nunca pasa por el modelo de contexto**: va directo a `stop`, en cualquier modo y entrada, sin pasar por el umbral de confianza.
 - `VICTORY` (cambiar de entrada) y `OPEN_PALM` funcionan aunque la entrada activa sea VOZ. En entrada VOZ, los demás gestos se ignoran, y el micrófono se ignora mientras la entrada son GESTOS.
 - Las pruebas automatizadas usan solo `--mock`. Las pruebas con el robot real las hace el equipo, con supervisión.
 
@@ -287,11 +288,13 @@ El sistema necesita `models/gesture_model.joblib`. Si no existe, termina con có
 
 | Parte | Estado |
 |-------|--------|
-| Pipeline de gestos (captura, características, entrenamiento, predicción) | En progreso |
-| Puente NAOqi y cliente | En progreso |
-| Modelo de contexto y capa de seguridad | En progreso |
-| `brain/main.py` (webcam, ejecución, confirmación, vista previa, registro CSV) | Terminado; probado solo en `--mock` |
-| Puente con el robot real | Pendiente de prueba en el robot |
+| Pipeline de gestos (captura, características, entrenamiento, predicción) | Terminado. 10 813 fotogramas, 3 personas, 8 clases; evaluado con persona reservada |
+| Puente NAOqi y cliente | Terminado; probado con el robot virtual de Choregraphe |
+| Capa de seguridad | Terminada y cubierta por pruebas |
+| Modelo de contexto | **Sin entrenar**: falta recolectar `data/context/scenarios.csv` con el robot. El sistema corre con las reglas por gesto + la capa de seguridad |
+| `brain/main.py` (webcam, ejecución, confirmación, vista previa, registro CSV) | Terminado |
+| Prueba con el robot físico (Zyra) | **Pendiente.** Todas las ejecuciones registradas en `runs/` son contra Choregraphe (`127.0.0.1`) |
+| Informe y video | Pendientes (ver `report/`) |
 
 ---
 

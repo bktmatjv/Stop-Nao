@@ -55,7 +55,7 @@ def _mirror(lm):
 
 # ------------------------------------------------------------------ contract
 def test_labels_contract():
-    assert LABELS == ["THUMBS_UP", "OPEN_PALM", "POINT_LEFT", "POINT_RIGHT", "VICTORY", "FIST", "TWO_FINGERS", "LOVE_YOU", "NONE"]
+    assert LABELS == ["THUMBS_UP", "OPEN_PALM", "POINT_LEFT", "POINT_RIGHT", "VICTORY", "FIST", "LOVE_YOU", "NONE"]
     assert NUM_LANDMARKS == 21
     assert CSV_COLUMNS[:3] == ["person", "label", "handedness"]
     assert CSV_COLUMNS[3:6] == ["x0", "y0", "z0"] and CSV_COLUMNS[-3:] == ["x20", "y20", "z20"]

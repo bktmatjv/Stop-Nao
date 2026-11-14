@@ -125,11 +125,11 @@ def _validate_wave(ctx: dict) -> Decision:
         return _refuse("WAVE", "WARN_TOO_CLOSE", "Estás muy cerca. Aléjate un poco para que pueda saludar.")
     if not _flag(ctx, "standing", False):
         return _refuse("WAVE", "WARN_MUST_STAND", "Estoy sentado. Primero debo ponerme de pie para saludar.")
-    return _result("WAVE", "WAVE", {}, "¡Hola! ¡Modo fiesta y victoria activado! ¡A bailar!", "magenta")
+    return _result("WAVE", "WAVE", {}, "¡Hola! Un gusto saludarte.", "magenta")
 
 
 def _validate_greet(ctx: dict) -> Decision:
-    """TWO_FINGERS gesture: a quick salute greeting. Allowed standing or sitting."""
+    """Quick salute greeting. Allowed standing or sitting."""
     if _flag(ctx, "moving", False):
         return _refuse("GREET", "WARN_MUST_STOP", "Me estoy moviendo. Espera un momento para saludar.")
     return _result("GREET", "GREET", {}, "¡Hola! ¡Encantado de conocerte!", "cyan")
